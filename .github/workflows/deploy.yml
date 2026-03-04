@@ -15,10 +15,21 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          script_stop: true
           script: |
-            set -e
+            set -euo pipefail
+
+            # Make sure GitHub host key is known (prevents interactive prompt)
+            mkdir -p /root/.ssh
+            chmod 700 /root/.ssh
+            ssh-keyscan -H github.com >> /root/.ssh/known_hosts
+            chmod 600 /root/.ssh/known_hosts
+
+            # Force git to use the deploy key that is stored on the server
+            export GIT_SSH_COMMAND="ssh -i /root/.ssh/github_deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+
             cd /opt/knu-students-rating
-            git pull
+            git pull origin main
 
             cd frontend
             npm ci
