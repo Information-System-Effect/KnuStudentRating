@@ -1,0 +1,25 @@
+{
+  "name": "gateaway-server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/run-tests.js",
+    "start": "node src/server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Information-System-Effect/Gateaway-server.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Information-System-Effect/Gateaway-server/issues"
+  },
+  "homepage": "https://github.com/Information-System-Effect/Gateaway-server#readme",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "install": "^0.13.0"
+  }
+}

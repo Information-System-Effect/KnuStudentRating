@@ -1,0 +1,2 @@
+ALTER TABLE users
+    ADD COLUMN photo_url VARCHAR(1024) NULL AFTER about;
