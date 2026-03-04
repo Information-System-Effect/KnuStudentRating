@@ -1,0 +1,38 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+            cd /opt/knu-students-rating
+            git pull
+
+            cd frontend
+            npm ci
+            npm run build
+            cd ..
+
+            chmod +x mvnw
+            ./mvnw -DskipTests package
+            cp "$(ls target/pract-*.jar | grep -v '\.original$' | head -n1)" /opt/knu-students-rating/deploy/backend.jar
+
+            cd Gateway-server-main
+            npm ci
+
+            systemctl restart knu-backend
+            systemctl restart knu-gateway
+            systemctl status knu-backend --no-pager
+            systemctl status knu-gateway --no-pager
