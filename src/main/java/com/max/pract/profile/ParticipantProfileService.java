@@ -92,8 +92,8 @@ public class ParticipantProfileService {
     public ParticipantProfileResponse updateTeacherProfile(String teacherCode, UpdateParticipantProfileRequest request) {
         AppUser teacher = appUserRepository.findByCode(teacherCode)
                 .orElseThrow(() -> new ApiBadRequestException("Teacher not found: " + teacherCode));
-        if (teacher.getRole() != AppRole.TEACHER && teacher.getRole() != AppRole.POSTGRADUATE) {
-            throw new ApiForbiddenException("Target user is not a teacher/postgraduate");
+        if (teacher.getRole() != AppRole.TEACHER) {
+            throw new ApiForbiddenException("Target user is not a teacher");
         }
         applyProfileUpdate(teacher, request, true);
         return toResponse(appUserRepository.save(teacher));
@@ -255,7 +255,7 @@ public class ParticipantProfileService {
         if (role == AppRole.STUDENT) {
             return "STUDENT";
         }
-        if (role == AppRole.TEACHER || role == AppRole.POSTGRADUATE) {
+        if (role == AppRole.TEACHER) {
             return "TEACHER";
         }
         throw new ApiForbiddenException("Role is not allowed to self-declare technical skills");

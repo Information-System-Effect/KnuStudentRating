@@ -12,7 +12,7 @@ import java.util.regex.Pattern;
 @Component
 public class ContractRequestParser {
 
-    private static final Pattern USER_CODE_PATTERN = Pattern.compile("^[UTP]\\d+$");
+    private static final Pattern USER_CODE_PATTERN = Pattern.compile("^[UT]\\d+$");
 
     public ContractRequest parse(String payload) {
         if (payload == null || payload.isBlank()) {

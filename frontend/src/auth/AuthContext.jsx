@@ -210,11 +210,8 @@ export function AuthProvider({ children }) {
   );
 
   const register = useCallback(
-    async (role, payload) => {
-      const normalizedRole = String(role || "STUDENT").toUpperCase();
-      const endpoint = normalizedRole === "POSTGRADUATE" ? "/api/auth/register/postgraduate" : "/api/auth/register";
-
-      const tokens = await requestRaw(endpoint, {
+    async (_role, payload) => {
+      const tokens = await requestRaw("/api/auth/register", {
         method: "POST",
         body: payload,
       });

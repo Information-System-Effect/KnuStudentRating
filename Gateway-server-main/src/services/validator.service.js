@@ -1,6 +1,6 @@
 ﻿const { ALLOWED_OPERATIONS } = require("../utils/constants");
 
-const USER_CODE_RE = /^[UTP]\d+$/;
+const USER_CODE_RE = /^[UT]\d+$/;
 const FIELD_RE = /^[A-Za-z0-9_]+$/;
 const LEGACY_NUMERIC_RE = /^[+-]?\d+(\.\d+)?$/;
 
@@ -55,11 +55,11 @@ function validateParsedMessage(parsed) {
   const errors = [];
 
   if (!isValidUserCode(parsed.senderCode)) {
-    errors.push("Invalid senderCode: expected U<digits>, T<digits> or P<digits>");
+    errors.push("Invalid senderCode: expected U<digits> or T<digits>");
   }
 
   if (parsed.targetUserCode !== "_" && !isValidUserCode(parsed.targetUserCode)) {
-    errors.push("Invalid targetUserCode: expected U<digits>, T<digits>, P<digits> or _");
+    errors.push("Invalid targetUserCode: expected U<digits>, T<digits> or _");
   }
 
   if (!ALLOWED_OPERATIONS.includes(parsed.method)) {

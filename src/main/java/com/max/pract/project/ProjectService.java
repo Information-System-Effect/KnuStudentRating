@@ -86,8 +86,8 @@ public class ProjectService {
         for (Long userId : resolveUserIdsByCodes(request.getTeacherIds(), request.getTeacherCodes())) {
             AppUser user = appUserRepository.findById(userId)
                     .orElseThrow(() -> new ApiBadRequestException("User not found: " + userId));
-            if (user.getRole() != AppRole.TEACHER && user.getRole() != AppRole.POSTGRADUATE && user.getRole() != AppRole.ADMIN) {
-                throw new ApiForbiddenException("Only teacher/postgraduate/admin can be assigned as mentor");
+            if (user.getRole() != AppRole.TEACHER && user.getRole() != AppRole.ADMIN) {
+                throw new ApiForbiddenException("Only teacher/admin can be assigned as mentor");
             }
             members.add(createMember(saved.getId(), userId, ProjectMemberRole.MENTOR));
         }
@@ -127,8 +127,8 @@ public class ProjectService {
         for (Long userId : resolveUserIdsByCodes(body.getTeacherIds(), body.getTeacherCodes())) {
             AppUser user = appUserRepository.findById(userId)
                     .orElseThrow(() -> new ApiBadRequestException("User not found: " + userId));
-            if (user.getRole() != AppRole.TEACHER && user.getRole() != AppRole.POSTGRADUATE && user.getRole() != AppRole.ADMIN) {
-                throw new ApiForbiddenException("Only teacher/postgraduate/admin can be assigned as mentor");
+            if (user.getRole() != AppRole.TEACHER && user.getRole() != AppRole.ADMIN) {
+                throw new ApiForbiddenException("Only teacher/admin can be assigned as mentor");
             }
             members.add(createMember(saved.getId(), userId, ProjectMemberRole.MENTOR));
         }
@@ -207,9 +207,8 @@ public class ProjectService {
         }
         if ((memberRole == ProjectMemberRole.TEACHER || memberRole == ProjectMemberRole.MENTOR)
                 && targetUser.getRole() != AppRole.TEACHER
-                && targetUser.getRole() != AppRole.POSTGRADUATE
                 && targetUser.getRole() != AppRole.ADMIN) {
-            throw new ApiForbiddenException("Only teacher/postgraduate/admin can be assigned to mentor role");
+            throw new ApiForbiddenException("Only teacher/admin can be assigned to mentor role");
         }
 
         ProjectMemberEntity projectMember = new ProjectMemberEntity();

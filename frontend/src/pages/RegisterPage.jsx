@@ -3,7 +3,6 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const DEFAULT_FORM = {
-  role: "STUDENT",
   email: "",
   password: "",
   fullName: "",
@@ -36,7 +35,7 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      await register(form.role, {
+      await register("STUDENT", {
         email: form.email.trim(),
         password: form.password,
         fullName: form.fullName.trim(),
@@ -59,14 +58,6 @@ export default function RegisterPage() {
       <p className="muted">Створіть акаунт для участі в проєктах і системі взаємооцінювання.</p>
 
       <form onSubmit={handleSubmit} className="form-grid">
-        <label className="field">
-          <span>Роль</span>
-          <select name="role" value={form.role} onChange={updateField}>
-            <option value="STUDENT">Студент</option>
-            <option value="POSTGRADUATE">Аспірант</option>
-          </select>
-        </label>
-
         <label className="field">
           <span>Електронна пошта</span>
           <input type="email" name="email" value={form.email} onChange={updateField} required />

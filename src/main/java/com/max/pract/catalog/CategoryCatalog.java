@@ -31,7 +31,7 @@ public final class CategoryCatalog {
             "TEACHER_INITIATIVE"
     );
 
-    // Teacher/postgraduate author can rate system design + shared subjective categories.
+    // Teacher author can rate system design + shared subjective categories.
     public static final Set<String> TEACHER_SUBJECTIVE_ALLOWED_CODES = Set.of(
             "SYSTEM_DESIGN",
             "COMMUNICATION",

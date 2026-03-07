@@ -44,7 +44,7 @@ export default function ParticipantsDirectoryPage({ audience }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const endpoint = audience === "students" ? "students" : "teachers";
-  const title = audience === "students" ? "Профілі студентів" : "Профілі викладачів та аспірантів";
+  const title = audience === "students" ? "Профілі студентів" : "Профілі викладачів";
 
   const loadParticipants = useCallback(async () => {
     setIsLoading(true);

@@ -34,9 +34,10 @@ const REQUEST_STATUS_LABELS = {
 const ROLE_LABELS = {
   STUDENT: "Студент",
   TEACHER: "Викладач",
-  POSTGRADUATE: "Аспірант",
   ADMIN: "Адміністратор",
   MODERATOR: "Модератор",
+  OWNER: "Власник",
+  MENTOR: "Ментор",
 };
 
 const DIMENSION_LABELS = {

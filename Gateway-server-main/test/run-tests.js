@@ -6,10 +6,10 @@ const { shouldProxy } = require("../src/controllers/proxy.controller");
 
 const tests = [
   {
-    name: "parser supports postgraduate sender code",
+    name: "parser supports teacher sender code",
     run() {
-      const parsed = parseGatewayMessage('P42#_#GET#STUDENTS#"page=1;limit=20"');
-      assert.equal(parsed.senderCode, "P42");
+      const parsed = parseGatewayMessage('T42#_#GET#STUDENTS#"page=1;limit=20"');
+      assert.equal(parsed.senderCode, "T42");
       assert.equal(parsed.method, "GET");
       assert.equal(parsed.mode, "single");
     },

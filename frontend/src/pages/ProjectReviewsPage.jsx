@@ -20,6 +20,14 @@ function clampDelta(value, maxAbsDelta) {
   return Math.max(-maxAbsDelta, Math.min(maxAbsDelta, value));
 }
 
+function hasOpenReviewWindow(project) {
+  if (!project || project.status !== "COMPLETED" || !project.feedbackDeadlineAt) {
+    return false;
+  }
+  const deadline = new Date(project.feedbackDeadlineAt).getTime();
+  return Number.isFinite(deadline) && deadline > Date.now();
+}
+
 export default function ProjectReviewsPage() {
   const { api, authApi, isAuthenticated, me } = useAuth();
   const [reviews, setReviews] = useState([]);
@@ -44,12 +52,14 @@ export default function ProjectReviewsPage() {
 
     const allProjects = await authApi("/api/projects", { method: "GET" });
     const myProjects = allProjects.filter(
-      (project) => project.status === "COMPLETED" && (project.members || []).some((member) => member.userId === me.userId),
+      (project) => hasOpenReviewWindow(project) && (project.members || []).some((member) => member.userId === me.userId),
     );
     setProjects(myProjects);
 
     if (myProjects.length > 0) {
       setForm((current) => ({ ...current, projectId: String(myProjects[0].id) }));
+    } else {
+      setForm((current) => ({ ...current, projectId: "", targetUserId: "", categoryId: "" }));
     }
   }, [authApi, isAuthenticated, me?.userId]);
 
@@ -241,7 +251,7 @@ export default function ProjectReviewsPage() {
           <h2 className="panel-title">Додати оцінювання</h2>
 
           {!projects.length ? (
-            <p className="muted">У вас немає завершених проєктів, де ви є учасником.</p>
+            <p className="muted">У вас немає завершених проєктів з відкритим вікном оцінювання.</p>
           ) : (
             <form onSubmit={handleSubmit} className="form-grid two-col">
               <label className="field">
@@ -254,6 +264,8 @@ export default function ProjectReviewsPage() {
                   ))}
                 </select>
               </label>
+
+              <p className="muted">Оцінювання для обраного проєкту доступне до: {formatDateTime(selectedProject?.feedbackDeadlineAt)}</p>
 
               <label className="field">
                 <span>Кому</span>

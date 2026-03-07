@@ -274,15 +274,13 @@ public class ReviewService {
 
     private void validateAuthorTargetRoles(AppRole authorRole, AppRole targetRole) {
         boolean allowedAuthorRole = authorRole == AppRole.STUDENT
-                || authorRole == AppRole.TEACHER
-                || authorRole == AppRole.POSTGRADUATE;
+                || authorRole == AppRole.TEACHER;
         if (!allowedAuthorRole) {
             throw new ApiForbiddenException("Author role is not allowed to submit reviews");
         }
 
         boolean allowedTargetRole = targetRole == AppRole.STUDENT
                 || targetRole == AppRole.TEACHER
-                || targetRole == AppRole.POSTGRADUATE
                 || targetRole == AppRole.ADMIN;
         if (!allowedTargetRole) {
             throw new ApiForbiddenException("Target role is not reviewable");
@@ -296,9 +294,6 @@ public class ReviewService {
         if (role == AppRole.TEACHER || role == AppRole.ADMIN) {
             return "TEACHER";
         }
-        if (role == AppRole.POSTGRADUATE) {
-            return "TEACHER";
-        }
         throw new ApiForbiddenException("Unsupported target role for review categories");
     }
 
@@ -308,14 +303,14 @@ public class ReviewService {
             if (authorRole == AppRole.STUDENT) {
                 return TECHNICAL_LIMIT_STUDENT;
             }
-            if (authorRole == AppRole.TEACHER || authorRole == AppRole.POSTGRADUATE) {
+            if (authorRole == AppRole.TEACHER) {
                 return TECHNICAL_LIMIT_TEACHER;
             }
             throw new ApiForbiddenException("Author role is not allowed to submit technical review");
         }
 
         if ("SUBJECTIVE".equals(dimension)) {
-            if (authorRole != AppRole.STUDENT && authorRole != AppRole.TEACHER && authorRole != AppRole.POSTGRADUATE) {
+            if (authorRole != AppRole.STUDENT && authorRole != AppRole.TEACHER) {
                 throw new ApiForbiddenException("Author role is not allowed to submit subjective review");
             }
             if (!isSubjectiveCategoryAllowed(authorRole, category.code())) {
@@ -341,7 +336,7 @@ public class ReviewService {
         if (authorRole == AppRole.STUDENT) {
             return CategoryCatalog.STUDENT_SUBJECTIVE_ALLOWED_CODES.contains(normalizedCode);
         }
-        if (authorRole == AppRole.TEACHER || authorRole == AppRole.POSTGRADUATE) {
+        if (authorRole == AppRole.TEACHER) {
             return CategoryCatalog.TEACHER_SUBJECTIVE_ALLOWED_CODES.contains(normalizedCode);
         }
         return false;

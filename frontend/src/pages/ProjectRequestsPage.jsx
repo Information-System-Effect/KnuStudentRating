@@ -192,6 +192,7 @@ export default function ProjectRequestsPage() {
                   {formatRequestStatus(request.status)} | Створено: {formatDateTime(request.createdAt)} | Розглянуто:{" "}
                   {formatDateTime(request.reviewedAt)}
                 </p>
+                {request.adminComment ? <p className="muted">Коментар адміністратора: {request.adminComment}</p> : null}
                 {request.createdProjectId ? (
                   <p className="muted">
                     Проєкт створено: <span className="mono">#{request.createdProjectId}</span>
@@ -227,6 +228,7 @@ export default function ProjectRequestsPage() {
                       Проєкт створено автоматично: <span className="mono">#{request.createdProjectId}</span>
                     </p>
                   ) : null}
+                  {request.adminComment ? <p className="muted">Поточний коментар: {request.adminComment}</p> : null}
 
                   <label className="field">
                     <span>Коментар модерації</span>

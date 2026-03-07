@@ -47,7 +47,7 @@ public class SiteDataService {
         long completedProjects = queryCount("SELECT COUNT(1) FROM projects WHERE status = 'COMPLETED'");
         long pendingRequests = queryCount("SELECT COUNT(1) FROM project_requests WHERE status = 'PENDING'");
         long students = queryCount("SELECT COUNT(1) FROM users WHERE role = 'STUDENT'");
-        long teachers = queryCount("SELECT COUNT(1) FROM users WHERE role IN ('TEACHER', 'POSTGRADUATE')");
+        long teachers = queryCount("SELECT COUNT(1) FROM users WHERE role = 'TEACHER'");
         return new SiteHomeResponse(
                 completedProjects,
                 pendingRequests,
@@ -138,12 +138,7 @@ public class SiteDataService {
 
     @Transactional(readOnly = true)
     public List<SiteParticipantCardDto> getTeachers() {
-        return findParticipantsByRoles(List.of("TEACHER", "POSTGRADUATE"));
-    }
-
-    @Transactional(readOnly = true)
-    public List<SiteParticipantCardDto> getPostgraduates() {
-        return findParticipantsByRoles(List.of("POSTGRADUATE"));
+        return findParticipantsByRoles(List.of("TEACHER"));
     }
 
     @Transactional(readOnly = true)

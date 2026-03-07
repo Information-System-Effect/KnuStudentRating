@@ -42,11 +42,6 @@ public class SiteDataController {
         return new ApiResponse("success", siteDataService.getTeachers());
     }
 
-    @GetMapping("/participants/postgraduates")
-    public ApiResponse postgraduates() {
-        return new ApiResponse("success", siteDataService.getPostgraduates());
-    }
-
     @GetMapping("/projects/reviews")
     public ApiResponse recentReviews(@RequestParam(defaultValue = "50") int limit) {
         int normalizedLimit = Math.max(1, Math.min(limit, 200));

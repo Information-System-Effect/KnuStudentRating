@@ -78,7 +78,6 @@ public class AdminUserService {
         return switch (role) {
             case STUDENT -> "U" + userId;
             case TEACHER -> "T" + userId;
-            case POSTGRADUATE -> "P" + userId;
             case ADMIN -> currentCode == null || currentCode.isBlank() ? "U" + userId : currentCode;
         };
     }

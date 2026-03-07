@@ -12,7 +12,7 @@ export default function ParticipantsReviewsPage({ audience }) {
   const [isLoading, setIsLoading] = useState(true);
 
   const endpoint = audience === "students" ? "students" : "teachers";
-  const title = audience === "students" ? "Відгуки про студентів" : "Відгуки про викладачів та аспірантів";
+  const title = audience === "students" ? "Відгуки про студентів" : "Відгуки про викладачів";
 
   const loadParticipants = useCallback(async () => {
     setIsLoading(true);

@@ -1,0 +1,6 @@
+UPDATE users
+SET role = 'TEACHER'
+WHERE role = 'POSTGRADUATE';
+
+ALTER TABLE users
+    MODIFY role ENUM('STUDENT', 'TEACHER', 'ADMIN') NOT NULL;

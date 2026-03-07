@@ -261,9 +261,6 @@ public class CategoryScoreService {
         if (role == AppRole.TEACHER) {
             return "TEACHER";
         }
-        if (role == AppRole.POSTGRADUATE) {
-            return "TEACHER";
-        }
         throw new ApiForbiddenException("Role is not allowed to self-declare technical skills");
     }
 

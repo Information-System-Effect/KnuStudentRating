@@ -12,8 +12,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.List;
-
 @RestController
 @RequestMapping("/api/participants")
 public class ParticipantProfileController {
@@ -90,13 +88,7 @@ public class ParticipantProfileController {
 
     @GetMapping("/teachers")
     public ApiResponse listTeachers() {
-        return new ApiResponse("success",
-                participantProfileService.listByRoles(List.of(AppRole.TEACHER, AppRole.POSTGRADUATE)));
-    }
-
-    @GetMapping("/postgraduates")
-    public ApiResponse listPostgraduates() {
-        return new ApiResponse("success", participantProfileService.listByRole(AppRole.POSTGRADUATE));
+        return new ApiResponse("success", participantProfileService.listByRole(AppRole.TEACHER));
     }
 
     @GetMapping("/{code}")

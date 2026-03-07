@@ -54,7 +54,6 @@ function createLifecycleDraft(project) {
   return {
     status: project?.status || "ACTIVE",
     endAt: normalizeDateTimeInput(project?.endAt),
-    feedbackDeadlineAt: normalizeDateTimeInput(project?.feedbackDeadlineAt),
   };
 }
 
@@ -67,7 +66,6 @@ function resolveLifecycleDraft(project, draft) {
 
 function createTeacherForm() {
   return {
-    role: "TEACHER",
     email: "",
     password: "",
     fullName: "",
@@ -81,7 +79,6 @@ function createProjectForm() {
   return {
     title: "",
     description: "",
-    feedbackDeadlineAt: "",
     studentIds: [],
     teacherIds: [],
   };
@@ -251,7 +248,7 @@ export default function AdminConsolePage() {
   );
 
   const teacherUsers = useMemo(
-    () => users.filter((user) => ["TEACHER", "POSTGRADUATE", "ADMIN"].includes(String(user.role || "").toUpperCase())),
+    () => users.filter((user) => ["TEACHER", "ADMIN"].includes(String(user.role || "").toUpperCase())),
     [users],
   );
 
@@ -415,7 +412,6 @@ export default function AdminConsolePage() {
         body: {
           title: projectCreateForm.title.trim(),
           description: projectCreateForm.description.trim(),
-          feedbackDeadlineAt: projectCreateForm.feedbackDeadlineAt || null,
           studentIds: projectCreateForm.studentIds,
           teacherIds: projectCreateForm.teacherIds,
         },
@@ -526,15 +522,17 @@ export default function AdminConsolePage() {
       {
         status: draft.status,
         endAt: draft.endAt || null,
-        feedbackDeadlineAt: draft.feedbackDeadlineAt || null,
       },
       `Параметри проєкту #${project.id} оновлено.`,
     );
   }
 
   async function quickCompleteProject(project) {
+    if (project.status === "COMPLETED") {
+      return;
+    }
+
     const endAt = plusHoursInput(0);
-    const feedbackDeadlineAt = plusHoursInput(24);
 
     setLifecycleDrafts((current) => ({
       ...current,
@@ -542,7 +540,6 @@ export default function AdminConsolePage() {
         ...resolveLifecycleDraft(project, current[project.id]),
         status: "COMPLETED",
         endAt,
-        feedbackDeadlineAt,
       },
     }));
 
@@ -551,7 +548,6 @@ export default function AdminConsolePage() {
       {
         status: "COMPLETED",
         endAt,
-        feedbackDeadlineAt,
       },
       `Проєкт #${project.id} завершено. Вікно оцінювання активне 24 години.`,
     );
@@ -629,8 +625,7 @@ export default function AdminConsolePage() {
     setCreatingTeacher(true);
 
     try {
-      const endpoint = teacherForm.role === "POSTGRADUATE" ? "/api/auth/register/postgraduate" : "/api/auth/register/teacher";
-      await authApi(endpoint, {
+      await authApi("/api/auth/register/teacher", {
         method: "POST",
         body: {
           email: teacherForm.email.trim(),
@@ -641,9 +636,7 @@ export default function AdminConsolePage() {
           about: teacherForm.about.trim(),
         },
       });
-      setMessage(
-        teacherForm.role === "POSTGRADUATE" ? "Акаунт аспіранта створено." : "Акаунт викладача створено.",
-      );
+      setMessage("Акаунт викладача створено.");
       setTeacherForm(createTeacherForm());
       await loadAdminData();
     } catch (submitError) {
@@ -807,7 +800,7 @@ export default function AdminConsolePage() {
         </div>
 
         <section className="panel panel-alt">
-          <h3 className="panel-title">Швидке створення проєкту</h3>
+          <h3 className="panel-title">Створення проєкту</h3>
           <form className="form-grid three-col" onSubmit={createProjectFromAdmin}>
             <label className="field">
               <span>Назва</span>
@@ -818,15 +811,6 @@ export default function AdminConsolePage() {
                 onChange={updateProjectCreateField}
                 required
                 maxLength={255}
-              />
-            </label>
-            <label className="field">
-              <span>Дедлайн оцінювання</span>
-              <input
-                type="datetime-local"
-                name="feedbackDeadlineAt"
-                value={projectCreateForm.feedbackDeadlineAt}
-                onChange={updateProjectCreateField}
               />
             </label>
             <label className="field field-wide">
@@ -886,7 +870,7 @@ export default function AdminConsolePage() {
               </div>
             </label>
             <label className="field">
-              <span>Викладачі / аспіранти</span>
+              <span>Викладачі / ментори</span>
               <input
                 type="search"
                 value={projectTeacherQuery}
@@ -916,7 +900,7 @@ export default function AdminConsolePage() {
                 <p className="muted">Введіть частину імені, коду або email для пошуку.</p>
               )}
               <div className="picker-selected">
-                {!selectedTeacherUsers.length ? <p className="muted">Викладачів або аспірантів ще не додано.</p> : null}
+                {!selectedTeacherUsers.length ? <p className="muted">Викладачів або менторів ще не додано.</p> : null}
                 {selectedTeacherUsers.map((user) => (
                   <div key={`teacher-selected-${user.userId}`} className="picker-chip">
                     <span>
@@ -951,6 +935,7 @@ export default function AdminConsolePage() {
             const memberSaving = upsertingMemberProjectId === project.id;
             const deletingProject = deletingProjectId === project.id;
             const purgingProject = purgingProjectId === project.id;
+            const isCompleted = project.status === "COMPLETED";
 
             return (
               <article key={project.id} className="list-card">
@@ -963,14 +948,18 @@ export default function AdminConsolePage() {
 
                 <p>{project.description || "Без опису."}</p>
                 <p className="muted">
-                  Початок: {formatDateTime(project.startAt)} | Завершення: {formatDateTime(project.endAt)} | Дедлайн оцінювання:{" "}
+                  Початок: {formatDateTime(project.startAt)} | Завершення: {formatDateTime(project.endAt)} | Оцінювання до:{" "}
                   {formatDateTime(project.feedbackDeadlineAt)}
                 </p>
 
                 <form className="form-grid three-col" onSubmit={(event) => submitLifecycle(project, event)}>
                   <label className="field">
                     <span>Статус</span>
-                    <select value={draft.status} onChange={(event) => updateLifecycleDraft(project, "status", event.target.value)}>
+                    <select
+                      value={draft.status}
+                      onChange={(event) => updateLifecycleDraft(project, "status", event.target.value)}
+                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                    >
                       <option value="ACTIVE">Активний</option>
                       <option value="COMPLETED">Завершений</option>
                       <option value="ARCHIVED">Архів</option>
@@ -978,20 +967,12 @@ export default function AdminConsolePage() {
                   </label>
 
                   <label className="field">
-                    <span>Дата завершення</span>
+                    <span>Дата завершення проєкту</span>
                     <input
                       type="datetime-local"
                       value={draft.endAt}
                       onChange={(event) => updateLifecycleDraft(project, "endAt", event.target.value)}
-                    />
-                  </label>
-
-                  <label className="field">
-                    <span>Дедлайн оцінювання</span>
-                    <input
-                      type="datetime-local"
-                      value={draft.feedbackDeadlineAt}
-                      onChange={(event) => updateLifecycleDraft(project, "feedbackDeadlineAt", event.target.value)}
+                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
                     />
                   </label>
 
@@ -999,7 +980,7 @@ export default function AdminConsolePage() {
                     <button
                       type="submit"
                       className="button button-primary"
-                      disabled={lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
                     >
                       {lifecycleSaving ? "Збереження..." : "Зберегти"}
                     </button>
@@ -1007,9 +988,9 @@ export default function AdminConsolePage() {
                       type="button"
                       className="button button-soft"
                       onClick={() => quickCompleteProject(project)}
-                      disabled={lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
                     >
-                      Завершити зараз (+24 год)
+                      {isCompleted ? "Проєкт уже завершено" : "Завершити зараз (+24 год)"}
                     </button>
                     <button
                       type="button"
@@ -1159,15 +1140,8 @@ export default function AdminConsolePage() {
           </section>
 
           <section className="panel panel-alt">
-            <h3 className="panel-title">Створити викладача / аспіранта</h3>
+            <h3 className="panel-title">Створити акаунт викладача</h3>
             <form onSubmit={createTeacherAccount} className="form-grid">
-              <label className="field">
-                <span>Тип акаунта</span>
-                <select name="role" value={teacherForm.role} onChange={updateTeacherField}>
-                  <option value="TEACHER">Викладач</option>
-                  <option value="POSTGRADUATE">Аспірант</option>
-                </select>
-              </label>
               <label className="field">
                 <span>Електронна пошта</span>
                 <input type="email" name="email" value={teacherForm.email} onChange={updateTeacherField} required />

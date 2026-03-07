@@ -39,8 +39,8 @@ class ContractRequestParserTest {
     }
 
     @Test
-    void parsesPostgraduateUserCodes() {
-        ContractRequest request = parser.parse("P42#U100#GET#STUDENTS#\"page=1;limit=10\"");
-        assertEquals("P42", request.senderId());
+    void parsesTeacherUserCodes() {
+        ContractRequest request = parser.parse("T42#U100#GET#STUDENTS#\"page=1;limit=10\"");
+        assertEquals("T42", request.senderId());
     }
 }

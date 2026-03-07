@@ -21,6 +21,7 @@ public class ProjectController {
     }
 
     @PostMapping("/api/projects")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse createProject(
             @AuthenticationPrincipal AppUserPrincipal principal,
             @Valid @RequestBody CreateProjectRequest request

@@ -92,7 +92,7 @@ export default function AppShell() {
 
       <footer className="container footer">
         <span>Платформа рейтингу КНУ</span>
-        <span>Для студентів, викладачів та аспірантів</span>
+        <span>Для студентів, викладачів і адміністраторів</span>
       </footer>
     </div>
   );

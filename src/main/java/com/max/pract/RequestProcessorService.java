@@ -149,9 +149,9 @@ public class RequestProcessorService {
             }
             if (queryParameters.containsKey(TEACHERS_QUERY_KEY)) {
                 Pagination pagination = parsePagination(queryParameters.get(TEACHERS_QUERY_KEY));
-                return new ApiResponse("success", loadUsersByRoles(List.of(AppRole.TEACHER, AppRole.POSTGRADUATE), pagination));
+                return new ApiResponse("success", loadUsersByRoles(List.of(AppRole.TEACHER), pagination));
             }
-            return new ApiResponse("error", "For target '_' supported queries are STUDENTS or TEACHERS (teachers includes postgraduates)");
+            return new ApiResponse("error", "For target '_' supported queries are STUDENTS or TEACHERS");
         }
         GatewayUser targetUser = resolveUser(targetCode);
         return new ApiResponse("success", loadCategoryScores(targetUser.id()));

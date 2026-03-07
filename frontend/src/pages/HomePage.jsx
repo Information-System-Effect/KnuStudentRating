@@ -56,7 +56,7 @@ export default function HomePage() {
           <strong className="stat-value">{stats ? stats.studentsCount : "..."}</strong>
         </article>
         <article className="stat-card">
-          <span className="stat-label">Викладачі та аспіранти</span>
+          <span className="stat-label">Викладачі</span>
           <strong className="stat-value">{stats ? stats.teachersCount : "..."}</strong>
         </article>
       </section>
@@ -76,7 +76,7 @@ export default function HomePage() {
         </Link>
         <Link to="/site/participants/teachers/profile" className="feature-card">
           <h3>Профілі викладачів</h3>
-          <p>Оцінюйте менторський внесок викладачів та аспірантів за відгуками і структурою категорій.</p>
+          <p>Оцінюйте менторський внесок викладачів за відгуками і структурою категорій.</p>
         </Link>
       </section>
 

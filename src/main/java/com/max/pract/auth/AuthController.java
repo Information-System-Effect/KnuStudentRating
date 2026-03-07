@@ -61,12 +61,6 @@ public class AuthController {
         return buildAuthResponse(tokens);
     }
 
-    @PostMapping("/register/postgraduate")
-    public ResponseEntity<ApiResponse> registerPostgraduate(@Valid @RequestBody RegisterRequest request) {
-        AuthTokensResponse tokens = authService.registerPostgraduate(request);
-        return buildAuthResponse(tokens);
-    }
-
     @PostMapping("/login")
     public ResponseEntity<ApiResponse> login(
             @Valid @RequestBody LoginRequest request,

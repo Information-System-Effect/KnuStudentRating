@@ -56,11 +56,6 @@ public class AuthService {
         return issueTokens(user, UUID.randomUUID().toString(), null, null);
     }
 
-    public AuthTokensResponse registerPostgraduate(RegisterRequest request) {
-        AppUser user = registerUser(request, AppRole.POSTGRADUATE);
-        return issueTokens(user, UUID.randomUUID().toString(), null, null);
-    }
-
     public AuthTokensResponse login(LoginRequest request, String clientIp, String clientUserAgent) {
         String normalizedEmail = normalizeEmail(request.getEmail());
         var authentication = authenticationManager.authenticate(
@@ -193,7 +188,6 @@ public class AuthService {
 
         String prefix = switch (role) {
             case TEACHER -> "T";
-            case POSTGRADUATE -> "P";
             default -> "U";
         };
         user.setCode(prefix + user.getId());
