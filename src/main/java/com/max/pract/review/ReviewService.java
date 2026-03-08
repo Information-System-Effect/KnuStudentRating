@@ -7,13 +7,12 @@ import com.max.pract.exception.ApiBadRequestException;
 import com.max.pract.exception.ApiForbiddenException;
 import com.max.pract.profile.CategoryScoreService;
 import com.max.pract.auth.AppRole;
-import com.max.pract.catalog.CategoryCatalog;
-import com.max.pract.project.ProjectStatus;
 import com.max.pract.project.ProjectService;
 import com.max.pract.project.ReviewWindowService;
 import com.max.pract.repo.AppUserRepository;
 import com.max.pract.repo.ProjectRepository;
 import com.max.pract.repo.ReviewRepository;
+import com.max.pract.review.dto.AuthoredReviewDto;
 import com.max.pract.review.dto.CreateReviewRequest;
 import com.max.pract.review.dto.ReviewCategoryOptionDto;
 import com.max.pract.review.dto.ReviewResponse;
@@ -23,6 +22,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -33,10 +34,7 @@ import java.util.Set;
 @Service
 public class ReviewService {
 
-    private static final float TECHNICAL_LIMIT_STUDENT = 5F;
-    private static final float TECHNICAL_LIMIT_TEACHER = 20F;
-    private static final float SUBJECTIVE_LIMIT_ALL = 5F;
-    private static final float BUDGET_EPSILON = 0.0001F;
+    private static final float REVIEW_DELTA_LIMIT = 5F;
 
     private final ReviewRepository reviewRepository;
     private final ProjectService projectService;
@@ -76,13 +74,9 @@ public class ReviewService {
                 projectId
         );
 
-        CategoryMeta category = loadCategoryMetaForTargetUser(request.getCategoryId(), target.getRole());
-        float maxAbsDelta = resolveMaxAbsDelta(author.getRole(), category);
-        validateDeltaWithinLimit(request.getDelta(), maxAbsDelta);
+        CategoryMeta category = loadCategoryMetaForTargetUser(target.getId(), request.getCategoryId());
+        validateDeltaWithinLimit(request.getDelta(), REVIEW_DELTA_LIMIT);
         ensureNoExistingReview(projectId, authorUserId, request.getTargetUserId(), request.getCategoryId());
-        if (isSubjectiveCategory(category)) {
-            validateSubjectiveBudgetForCreate(projectId, authorUserId, request.getTargetUserId(), request.getDelta());
-        }
 
         ReviewEntity review = new ReviewEntity();
         review.setProjectId(projectId);
@@ -120,18 +114,8 @@ public class ReviewService {
         }
 
         AppUser target = findUser(review.getTargetUserId(), "Target user not found");
-        CategoryMeta category = loadCategoryMetaForTargetUser(review.getCategoryId(), target.getRole());
-        float maxAbsDelta = resolveMaxAbsDelta(author.getRole(), category);
-        validateDeltaWithinLimit(request.getDelta(), maxAbsDelta);
-        if (isSubjectiveCategory(category)) {
-            validateSubjectiveBudgetForUpdate(
-                    projectId,
-                    authorUserId,
-                    review.getTargetUserId(),
-                    reviewId,
-                    request.getDelta()
-            );
-        }
+        loadCategoryMetaForTargetUser(target.getId(), review.getCategoryId());
+        validateDeltaWithinLimit(request.getDelta(), REVIEW_DELTA_LIMIT);
 
         Float previousDelta = review.getDelta();
         review.setDelta(request.getDelta());
@@ -160,21 +144,20 @@ public class ReviewService {
 
         validateReviewWindowAndMembership(authorUserId, targetUserId, author.getRole(), target.getRole(), projectId);
 
-        String expectedAudience = mapRoleToCategoryAudience(target.getRole());
         Set<Long> reviewedCategoryIds = findAlreadyReviewedCategoryIds(projectId, authorUserId, targetUserId);
-        float remainingSubjectiveBudget = remainingSubjectiveBudget(projectId, authorUserId, targetUserId, null);
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 """
-                        SELECT c.id AS category_id,
+                        SELECT DISTINCT c.id AS category_id,
                                c.code AS category_code,
                                c.name AS category_name,
                                ct.dimension AS category_dimension
-                        FROM categories c
+                        FROM category_scores cs
+                        JOIN categories c ON c.id = cs.category_id
                         JOIN category_types ct ON ct.id = c.category_type_id
-                        WHERE ct.audience = ?
+                        WHERE cs.user_id = ?
                         ORDER BY c.code
                         """,
-                expectedAudience
+                targetUserId
         );
 
         List<ReviewCategoryOptionDto> options = new ArrayList<>();
@@ -189,29 +172,79 @@ public class ReviewService {
             String dimension = normalizeToken(asText(row.get("category_dimension")));
             CategoryMeta category = new CategoryMeta(categoryId, categoryCode, categoryName, dimension);
 
-            try {
-                float maxAbsDelta = resolveMaxAbsDelta(author.getRole(), category);
-                Float subjectiveRemaining = null;
-                if (isSubjectiveCategory(category)) {
-                    subjectiveRemaining = remainingSubjectiveBudget;
-                    maxAbsDelta = Math.min(maxAbsDelta, remainingSubjectiveBudget);
-                }
-                if (maxAbsDelta <= BUDGET_EPSILON) {
-                    continue;
-                }
-                options.add(new ReviewCategoryOptionDto(
-                        category.id(),
-                        category.code(),
-                        category.name(),
-                        category.dimension(),
-                        maxAbsDelta,
-                        subjectiveRemaining
-                ));
-            } catch (ApiForbiddenException ignored) {
-                // Skip categories not allowed for current author role.
-            }
+            options.add(new ReviewCategoryOptionDto(
+                    category.id(),
+                    category.code(),
+                    category.name(),
+                    category.dimension(),
+                    REVIEW_DELTA_LIMIT,
+                    null
+            ));
         }
         return options;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AuthoredReviewDto> listAuthoredReviews(Long authorUserId, Long projectId, Long targetUserId) {
+        AppUser author = findUser(authorUserId, "Author user not found");
+        AppUser target = findUser(targetUserId, "Target user not found");
+
+        validateReviewWindowAndMembership(authorUserId, targetUserId, author.getRole(), target.getRole(), projectId);
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                """
+                        SELECT r.id AS review_id,
+                               r.project_id,
+                               r.author_user_id,
+                               r.target_user_id,
+                               r.category_id,
+                               r.delta,
+                               r.comment,
+                               r.created_at,
+                               c.code AS category_code,
+                               c.name AS category_name,
+                               ct.dimension AS category_dimension
+                        FROM reviews r
+                        JOIN categories c ON c.id = r.category_id
+                        JOIN category_types ct ON ct.id = c.category_type_id
+                        WHERE r.project_id = ?
+                          AND r.author_user_id = ?
+                          AND r.target_user_id = ?
+                        ORDER BY r.created_at DESC, r.id DESC
+                        """,
+                projectId,
+                authorUserId,
+                targetUserId
+        );
+
+        List<AuthoredReviewDto> reviews = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Long reviewId = ((Number) row.get("review_id")).longValue();
+            Long categoryId = ((Number) row.get("category_id")).longValue();
+            CategoryMeta category = new CategoryMeta(
+                    categoryId,
+                    asText(row.get("category_code")),
+                    asText(row.get("category_name")),
+                    normalizeToken(asText(row.get("category_dimension")))
+            );
+
+            reviews.add(new AuthoredReviewDto(
+                    reviewId,
+                    ((Number) row.get("project_id")).longValue(),
+                    ((Number) row.get("author_user_id")).longValue(),
+                    ((Number) row.get("target_user_id")).longValue(),
+                    categoryId,
+                    category.code(),
+                    category.name(),
+                    category.dimension(),
+                    toFloat(row.get("delta")),
+                    trimToNull(asText(row.get("comment"))),
+                    toInstant(row.get("created_at")),
+                    REVIEW_DELTA_LIMIT,
+                    null
+            ));
+        }
+        return reviews;
     }
 
     private void validateReviewWindowAndMembership(
@@ -234,21 +267,22 @@ public class ReviewService {
         }
     }
 
-    private CategoryMeta loadCategoryMetaForTargetUser(Long categoryId, AppRole targetRole) {
-        String expectedAudience = mapRoleToCategoryAudience(targetRole);
+    private CategoryMeta loadCategoryMetaForTargetUser(Long targetUserId, Long categoryId) {
         try {
             Map<String, Object> row = jdbcTemplate.queryForMap(
                     """
-                            SELECT c.id AS category_id,
+                            SELECT DISTINCT c.id AS category_id,
                                    c.code AS category_code,
                                    c.name AS category_name,
                                    ct.dimension AS category_dimension
-                            FROM categories c
+                            FROM category_scores cs
+                            JOIN categories c ON c.id = cs.category_id
                             JOIN category_types ct ON ct.id = c.category_type_id
-                            WHERE c.id = ? AND ct.audience = ?
+                            WHERE cs.user_id = ?
+                              AND c.id = ?
                             """,
-                    categoryId,
-                    expectedAudience
+                    targetUserId,
+                    categoryId
             );
             return new CategoryMeta(
                     ((Number) row.get("category_id")).longValue(),
@@ -257,7 +291,7 @@ public class ReviewService {
                     normalizeToken(asText(row.get("category_dimension")))
             );
         } catch (EmptyResultDataAccessException ex) {
-            throw new ApiForbiddenException("Category does not match target user audience");
+            throw new ApiForbiddenException("Category is not available in target profile");
         }
     }
 
@@ -265,11 +299,7 @@ public class ReviewService {
         ProjectEntity project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new ApiBadRequestException("Project not found"));
 
-        if (project.getStatus() != ProjectStatus.COMPLETED) {
-            throw new ApiForbiddenException("Reviews are available only after project completion");
-        }
-
-        reviewWindowService.assertWindowOpen(projectId);
+        reviewWindowService.assertWindowOpen(project);
     }
 
     private void validateAuthorTargetRoles(AppRole authorRole, AppRole targetRole) {
@@ -287,41 +317,6 @@ public class ReviewService {
         }
     }
 
-    private String mapRoleToCategoryAudience(AppRole role) {
-        if (role == AppRole.STUDENT) {
-            return "STUDENT";
-        }
-        if (role == AppRole.TEACHER || role == AppRole.ADMIN) {
-            return "TEACHER";
-        }
-        throw new ApiForbiddenException("Unsupported target role for review categories");
-    }
-
-    private float resolveMaxAbsDelta(AppRole authorRole, CategoryMeta category) {
-        String dimension = normalizeToken(category.dimension());
-        if ("TECHNICAL".equals(dimension)) {
-            if (authorRole == AppRole.STUDENT) {
-                return TECHNICAL_LIMIT_STUDENT;
-            }
-            if (authorRole == AppRole.TEACHER) {
-                return TECHNICAL_LIMIT_TEACHER;
-            }
-            throw new ApiForbiddenException("Author role is not allowed to submit technical review");
-        }
-
-        if ("SUBJECTIVE".equals(dimension)) {
-            if (authorRole != AppRole.STUDENT && authorRole != AppRole.TEACHER) {
-                throw new ApiForbiddenException("Author role is not allowed to submit subjective review");
-            }
-            if (!isSubjectiveCategoryAllowed(authorRole, category.code())) {
-                throw new ApiForbiddenException("Author role is not allowed to review this subjective category");
-            }
-            return SUBJECTIVE_LIMIT_ALL;
-        }
-
-        throw new ApiForbiddenException("Unsupported category dimension: " + category.dimension());
-    }
-
     private void validateDeltaWithinLimit(Float delta, float maxAbsDelta) {
         if (delta == null) {
             throw new ApiBadRequestException("Delta is required");
@@ -329,21 +324,6 @@ public class ReviewService {
         if (Math.abs(delta) > maxAbsDelta) {
             throw new ApiForbiddenException("Delta exceeds allowed limit. Max abs delta is " + maxAbsDelta);
         }
-    }
-
-    private boolean isSubjectiveCategoryAllowed(AppRole authorRole, String categoryCode) {
-        String normalizedCode = normalizeToken(categoryCode);
-        if (authorRole == AppRole.STUDENT) {
-            return CategoryCatalog.STUDENT_SUBJECTIVE_ALLOWED_CODES.contains(normalizedCode);
-        }
-        if (authorRole == AppRole.TEACHER) {
-            return CategoryCatalog.TEACHER_SUBJECTIVE_ALLOWED_CODES.contains(normalizedCode);
-        }
-        return false;
-    }
-
-    private boolean isSubjectiveCategory(CategoryMeta category) {
-        return "SUBJECTIVE".equals(normalizeToken(category.dimension()));
     }
 
     private void ensureNoExistingReview(Long projectId, Long authorUserId, Long targetUserId, Long categoryId) {
@@ -365,77 +345,6 @@ public class ReviewService {
         if (count != null && count > 0) {
             throw new ApiBadRequestException("Review for this category already exists. Use update endpoint.");
         }
-    }
-
-    private void validateSubjectiveBudgetForCreate(Long projectId, Long authorUserId, Long targetUserId, Float delta) {
-        float remainingBudget = remainingSubjectiveBudget(projectId, authorUserId, targetUserId, null);
-        if (Math.abs(delta) > remainingBudget + BUDGET_EPSILON) {
-            throw new ApiForbiddenException(
-                    "Subjective budget exceeded. Remaining subjective budget is " + remainingBudget
-            );
-        }
-    }
-
-    private void validateSubjectiveBudgetForUpdate(
-            Long projectId,
-            Long authorUserId,
-            Long targetUserId,
-            Long reviewId,
-            Float delta
-    ) {
-        float remainingWithoutCurrent = remainingSubjectiveBudget(projectId, authorUserId, targetUserId, reviewId);
-        if (Math.abs(delta) > remainingWithoutCurrent + BUDGET_EPSILON) {
-            throw new ApiForbiddenException(
-                    "Subjective budget exceeded. Remaining subjective budget is " + remainingWithoutCurrent
-            );
-        }
-    }
-
-    private float remainingSubjectiveBudget(
-            Long projectId,
-            Long authorUserId,
-            Long targetUserId,
-            Long excludeReviewId
-    ) {
-        Double used = excludeReviewId == null
-                ? jdbcTemplate.queryForObject(
-                """
-                        SELECT COALESCE(SUM(ABS(r.delta)), 0)
-                        FROM reviews r
-                        JOIN categories c ON c.id = r.category_id
-                        JOIN category_types ct ON ct.id = c.category_type_id
-                        WHERE r.project_id = ?
-                          AND r.author_user_id = ?
-                          AND r.target_user_id = ?
-                          AND ct.dimension = 'SUBJECTIVE'
-                        """,
-                Double.class,
-                projectId,
-                authorUserId,
-                targetUserId
-        )
-                : jdbcTemplate.queryForObject(
-                """
-                        SELECT COALESCE(SUM(ABS(r.delta)), 0)
-                        FROM reviews r
-                        JOIN categories c ON c.id = r.category_id
-                        JOIN category_types ct ON ct.id = c.category_type_id
-                        WHERE r.project_id = ?
-                          AND r.author_user_id = ?
-                          AND r.target_user_id = ?
-                          AND ct.dimension = 'SUBJECTIVE'
-                          AND r.id <> ?
-                        """,
-                Double.class,
-                projectId,
-                authorUserId,
-                targetUserId,
-                excludeReviewId
-        );
-
-        float usedSafe = used == null ? 0F : used.floatValue();
-        float remaining = SUBJECTIVE_LIMIT_ALL - usedSafe;
-        return Math.max(0F, remaining);
     }
 
     private Set<Long> findAlreadyReviewedCategoryIds(Long projectId, Long authorUserId, Long targetUserId) {
@@ -467,6 +376,26 @@ public class ReviewService {
 
     private String asText(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private Float toFloat(Object value) {
+        if (value instanceof Float floatValue) {
+            return floatValue;
+        }
+        if (value instanceof Number number) {
+            return number.floatValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        return Float.parseFloat(String.valueOf(value));
+    }
+
+    private Instant toInstant(Object value) {
+        if (value instanceof Timestamp timestamp) {
+            return timestamp.toInstant();
+        }
+        return null;
     }
 
     private AppUser findUser(Long userId, String errorMessage) {

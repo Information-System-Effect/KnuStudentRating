@@ -202,7 +202,7 @@ export default function ProjectsCompletedPage() {
         <section className="panel">
           <h2 className="panel-title">Мої активні проєкти</h2>
           {!myActiveProjects.length ? (
-            <p className="muted">У вас зараз немає активних проєктів, де ви є учасником або власником.</p>
+            <p className="muted">Наразі у Вас немає активних проєктів, у яких Ви є учасником або власником.</p>
           ) : (
             <div className="list-stack">
               {myActiveProjects.map((project) => {
@@ -212,7 +212,7 @@ export default function ProjectsCompletedPage() {
                     <h3>
                       {project.title} <span className="mono">#{project.id}</span>
                     </h3>
-                    <p>{project.description || "Без опису."}</p>
+                    <p>{project.description || "Опис відсутній."}</p>
                     <p className="muted">
                       Статус: {formatProjectStatus(project.status)} | Ваша роль: {formatRoleLabel(currentMember?.memberRole)} |
                       Початок: {formatDateTime(project.startAt)} | Планове завершення: {formatDateTime(project.endAt)}
@@ -235,11 +235,12 @@ export default function ProjectsCompletedPage() {
 
       {isAdmin ? (
         <section className="panel">
-          <h2 className="panel-title">Адмін: життєвий цикл проєктів</h2>
+          <h2 className="panel-title">Адміністрування життєвого циклу проєктів</h2>
           <p className="muted">
-            Звичайні користувачі створюють лише заявки. Пряме створення проєктів доступне тільки в адмінці.
+            Звичайні користувачі можуть створювати лише заявки. Пряме створення проєктів доступне виключно в панелі
+            адміністрування.
           </p>
-          {!sortedAdminProjects.length ? <p className="muted">Поки немає проєктів для керування.</p> : null}
+          {!sortedAdminProjects.length ? <p className="muted">Наразі немає проєктів для керування.</p> : null}
 
           <div className="list-stack">
             {sortedAdminProjects.map((project) => {
@@ -267,7 +268,7 @@ export default function ProjectsCompletedPage() {
                       >
                         <option value="ACTIVE">Активний</option>
                         <option value="COMPLETED">Завершений</option>
-                        <option value="ARCHIVED">Архів</option>
+                        <option value="ARCHIVED">Архівний</option>
                       </select>
                     </label>
 
@@ -283,7 +284,7 @@ export default function ProjectsCompletedPage() {
 
                     <div className="toolbar field-wide">
                       <button type="submit" className="button button-primary" disabled={isSaving || isCompleted}>
-                        {isSaving ? "Збереження..." : "Зберегти життєвий цикл"}
+                        {isSaving ? "Збереження..." : "Зберегти зміни"}
                       </button>
                       <button
                         type="button"
@@ -291,7 +292,7 @@ export default function ProjectsCompletedPage() {
                         onClick={() => handleQuickComplete(project)}
                         disabled={isSaving || isCompleted}
                       >
-                        {isCompleted ? "Проєкт уже завершено" : "Завершити зараз (+24 год для оцінювання)"}
+                        {isCompleted ? "Проєкт уже завершено" : "Завершити негайно (+24 год для оцінювання)"}
                       </button>
                     </div>
                   </form>
@@ -308,13 +309,13 @@ export default function ProjectsCompletedPage() {
       <section className="panel">
         <h2 className="panel-title">Завершені проєкти</h2>
         {isLoading ? <p>Завантаження проєктів...</p> : null}
-        {!isLoading && !sortedProjects.length ? <p className="muted">Поки немає завершених проєктів.</p> : null}
+        {!isLoading && !sortedProjects.length ? <p className="muted">Наразі завершені проєкти відсутні.</p> : null}
 
         <div className="list-stack">
           {sortedProjects.map((project) => (
             <article key={project.projectId} className="list-card">
               <h3>{project.title}</h3>
-              <p>{project.description || "Без опису."}</p>
+              <p>{project.description || "Опис відсутній."}</p>
               <p className="muted">
                 Статус: {formatProjectStatus(project.status)} | Початок: {formatDateTime(project.startAt)} | Завершення:{" "}
                 {formatDateTime(project.endAt)} | Оцінювання до: {formatDateTime(project.feedbackDeadlineAt)}

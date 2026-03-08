@@ -47,4 +47,16 @@ public class ReviewController {
                 reviewService.listReviewOptions(principal.getUserId(), projectId, targetUserId)
         );
     }
+
+    @GetMapping("/api/projects/{projectId}/reviews/mine")
+    public ApiResponse listMyReviews(
+            @AuthenticationPrincipal AppUserPrincipal principal,
+            @PathVariable Long projectId,
+            @RequestParam Long targetUserId
+    ) {
+        return new ApiResponse(
+                "success",
+                reviewService.listAuthoredReviews(principal.getUserId(), projectId, targetUserId)
+        );
+    }
 }

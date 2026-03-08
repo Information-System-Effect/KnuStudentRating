@@ -424,6 +424,11 @@ public class ProjectService {
                 })
                 .toList();
 
+        LocalDateTime effectiveFeedbackDeadline = reviewWindowService.resolveFeedbackDeadline(project);
+        if (effectiveFeedbackDeadline == null) {
+            effectiveFeedbackDeadline = project.getFeedbackDeadlineAt();
+        }
+
         return new ProjectResponse(
                 project.getId(),
                 project.getTitle(),
@@ -432,7 +437,7 @@ public class ProjectService {
                 project.getCreatedFromRequestId(),
                 project.getStartAt(),
                 project.getEndAt(),
-                project.getFeedbackDeadlineAt(),
+                effectiveFeedbackDeadline,
                 project.getCreatedAt(),
                 members
         );

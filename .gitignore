@@ -30,6 +30,7 @@ lerna-debug.log*
 target/
 !**/src/main/**/target/
 !**/src/test/**/target/
+.m2/
 *.class
 out/
 hs_err_pid*

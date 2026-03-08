@@ -18,14 +18,19 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,123 +55,55 @@ class ReviewServiceTest {
     private ReviewService reviewService;
 
     @Test
-    void createRejectsReviewWhenProjectNotCompleted() {
-        AppUser author = new AppUser();
-        author.setRole(AppRole.STUDENT);
+    void createRejectsReviewWhenWindowIsClosed() {
+        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT);
+        doThrow(new ApiForbiddenException("Review window is closed for this project"))
+                .when(reviewWindowService)
+                .assertWindowOpen(any(ProjectEntity.class));
 
-        AppUser target = new AppUser();
-        target.setRole(AppRole.STUDENT);
-
-        when(appUserRepository.findById(10L)).thenReturn(Optional.of(author));
-        when(appUserRepository.findById(11L)).thenReturn(Optional.of(target));
-
-        ProjectEntity project = new ProjectEntity();
-        project.setStatus(ProjectStatus.ACTIVE);
-        when(projectRepository.findById(99L)).thenReturn(Optional.of(project));
-
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(2.0f);
-        request.setComment("ok");
+        CreateReviewRequest request = createRequest(11L, 5L, 2.0f, "closed");
 
         assertThrows(ApiForbiddenException.class, () -> reviewService.create(10L, 99L, request));
     }
 
     @Test
-    void createRejectsStudentTechnicalDeltaAboveFive() {
-        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT, "LANG_JAVA", "TECHNICAL");
+    void createRejectsDeltaAboveFive() {
+        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT);
 
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(5.1f);
-        request.setComment("too much");
+        CreateReviewRequest request = createRequest(11L, 5L, 5.1f, "too much");
 
         assertThrows(ApiForbiddenException.class, () -> reviewService.create(10L, 99L, request));
     }
 
     @Test
-    void createRejectsTeacherTechnicalDeltaAboveTwenty() {
-        mockValidProjectContext(AppRole.TEACHER, AppRole.STUDENT, "LANG_JAVA", "TECHNICAL");
+    void createRejectsCategoryMissingInTargetProfile() {
+        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT);
+        when(jdbcTemplate.queryForMap(anyString(), eq(11L), eq(5L)))
+                .thenThrow(new EmptyResultDataAccessException(1));
 
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(20.5f);
-        request.setComment("too much");
-
-        assertThrows(ApiForbiddenException.class, () -> reviewService.create(10L, 99L, request));
-    }
-
-    @Test
-    void createRejectsStudentOnSystemDesignSubjectiveCategory() {
-        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT, "SYSTEM_DESIGN", "SUBJECTIVE");
-
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(3f);
-        request.setComment("forbidden subjective");
-
-        assertThrows(ApiForbiddenException.class, () -> reviewService.create(10L, 99L, request));
-    }
-
-    @Test
-    void createRejectsTeacherOnTeamworkSubjectiveCategory() {
-        mockValidProjectContext(AppRole.TEACHER, AppRole.STUDENT, "TEAMWORK", "SUBJECTIVE");
-
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(3f);
-        request.setComment("forbidden subjective");
-
-        assertThrows(ApiForbiddenException.class, () -> reviewService.create(10L, 99L, request));
-    }
-
-    @Test
-    void createRejectsSubjectiveReviewWhenBudgetExceeded() {
-        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT, "STUDENT_COMMUNICATION", "SUBJECTIVE");
-        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(99L), eq(10L), eq(11L), eq(5L)))
-                .thenReturn(0);
-        when(jdbcTemplate.queryForObject(anyString(), eq(Double.class), eq(99L), eq(10L), eq(11L)))
-                .thenReturn(4.0);
-
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(2.0f);
-        request.setComment("budget overflow");
+        CreateReviewRequest request = createRequest(11L, 5L, 3.0f, "missing category");
 
         assertThrows(ApiForbiddenException.class, () -> reviewService.create(10L, 99L, request));
     }
 
     @Test
     void createRejectsDuplicateReviewBySameCategory() {
-        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT, "STUDENT_COMMUNICATION", "SUBJECTIVE");
+        mockValidProjectContext(AppRole.STUDENT, AppRole.STUDENT);
         when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(99L), eq(10L), eq(11L), eq(5L)))
                 .thenReturn(1);
 
-        CreateReviewRequest request = new CreateReviewRequest();
-        request.setTargetUserId(11L);
-        request.setCategoryId(5L);
-        request.setDelta(1.0f);
-        request.setComment("duplicate");
+        CreateReviewRequest request = createRequest(11L, 5L, 1.0f, "duplicate");
 
         assertThrows(ApiBadRequestException.class, () -> reviewService.create(10L, 99L, request));
     }
 
-    private void mockValidProjectContext(
-            AppRole authorRole,
-            AppRole targetRole,
-            String categoryCode,
-            String dimension
-    ) {
+    private void mockValidProjectContext(AppRole authorRole, AppRole targetRole) {
         AppUser author = new AppUser();
+        ReflectionTestUtils.setField(author, "id", 10L);
         author.setRole(authorRole);
 
         AppUser target = new AppUser();
+        ReflectionTestUtils.setField(target, "id", 11L);
         target.setRole(targetRole);
 
         when(appUserRepository.findById(10L)).thenReturn(Optional.of(author));
@@ -176,15 +113,26 @@ class ReviewServiceTest {
         project.setStatus(ProjectStatus.COMPLETED);
         when(projectRepository.findById(99L)).thenReturn(Optional.of(project));
 
-        when(projectService.isProjectMember(99L, 10L)).thenReturn(true);
-        when(projectService.isProjectMember(99L, 11L)).thenReturn(true);
+        lenient().when(projectService.isProjectMember(99L, 10L)).thenReturn(true);
+        lenient().when(projectService.isProjectMember(99L, 11L)).thenReturn(true);
 
-        when(jdbcTemplate.queryForMap(anyString(), eq(5L), eq("STUDENT")))
+        lenient().when(jdbcTemplate.queryForMap(anyString(), eq(11L), eq(5L)))
                 .thenReturn(Map.of(
                         "category_id", 5L,
-                        "category_code", categoryCode,
-                        "category_name", categoryCode,
-                        "category_dimension", dimension
+                        "category_code", "STUDENT_LANG_JAVA",
+                        "category_name", "Java",
+                        "category_dimension", "TECHNICAL"
                 ));
+        lenient().when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), eq(99L), eq(10L), eq(11L), eq(5L)))
+                .thenReturn(0);
+    }
+
+    private CreateReviewRequest createRequest(Long targetUserId, Long categoryId, Float delta, String comment) {
+        CreateReviewRequest request = new CreateReviewRequest();
+        request.setTargetUserId(targetUserId);
+        request.setCategoryId(categoryId);
+        request.setDelta(delta);
+        request.setComment(comment);
+        return request;
     }
 }

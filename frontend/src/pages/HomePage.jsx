@@ -93,7 +93,7 @@ export default function HomePage() {
               Заявки
             </Link>
             <Link to="/site/auth/profile" className="chip-link">
-              Акаунт
+              Обліковий запис
             </Link>
             <Link to="/site/projects/rules" className="chip-link">
               Правила

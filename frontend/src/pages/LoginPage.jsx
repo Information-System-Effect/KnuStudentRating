@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <section className="auth-panel">
       <h1 className="panel-title">Вхід</h1>
-      <p className="muted">Увійдіть у свій акаунт, щоб керувати профілем, заявками та модерацією.</p>
+      <p className="muted">Увійдіть до облікового запису, щоб керувати профілем, заявками та процесами модерації.</p>
 
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field">
@@ -80,7 +80,7 @@ export default function LoginPage() {
       {error ? <div className="message message-error">{error}</div> : null}
 
       <p className="muted">
-        Ще немає акаунта? <Link to="/site/auth/register">Зареєструватися</Link>.
+        Ще не маєте облікового запису? <Link to="/site/auth/register">Зареєструватися</Link>.
       </p>
     </section>
   );

@@ -312,9 +312,9 @@ export default function ParticipantProfilePage() {
                 <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span>
               </p>
               <p>
-                Дельта: <strong>{formatDelta(review.delta)}</strong>
+                Коригування: <strong>{formatDelta(review.delta)}</strong>
               </p>
-              <p>{review.comment || "Без коментаря."}</p>
+              <p>{review.comment || "Коментар відсутній."}</p>
               <p className="muted">{formatDateTime(review.createdAt)}</p>
             </article>
           ))}
@@ -342,7 +342,7 @@ export default function ParticipantProfilePage() {
             </label>
 
             <label className="field field-wide">
-              <span>Про себе</span>
+              <span>Відомості про себе</span>
               <textarea name="about" rows={4} value={profileForm.about} onChange={updateProfileField} maxLength={2000} />
             </label>
 

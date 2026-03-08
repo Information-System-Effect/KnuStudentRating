@@ -59,7 +59,7 @@ export default function AuthProfilePage() {
   return (
     <div className="page-stack">
       <section className="panel">
-        <h1 className="panel-title">Мій акаунт</h1>
+        <h1 className="panel-title">Мій обліковий запис</h1>
 
         {isLoading ? <p>Завантаження профілю...</p> : null}
 
@@ -99,7 +99,7 @@ export default function AuthProfilePage() {
           </Link>
           {isAdmin ? (
             <Link to="/site/admin" className="button button-soft">
-              Перейти в адмінку
+              Перейти до панелі адміністрування
             </Link>
           ) : null}
         </div>

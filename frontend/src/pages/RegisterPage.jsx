@@ -55,7 +55,7 @@ export default function RegisterPage() {
   return (
     <section className="auth-panel">
       <h1 className="panel-title">Реєстрація</h1>
-      <p className="muted">Створіть акаунт для участі в проєктах і системі взаємооцінювання.</p>
+      <p className="muted">Створіть обліковий запис для участі в проєктах і системі взаємооцінювання.</p>
 
       <form onSubmit={handleSubmit} className="form-grid">
         <label className="field">
@@ -84,12 +84,12 @@ export default function RegisterPage() {
         </label>
 
         <label className="field">
-          <span>Про себе</span>
+          <span>Відомості про себе</span>
           <textarea name="about" rows={4} value={form.about} onChange={updateField} />
         </label>
 
         <button type="submit" className="button button-primary" disabled={isSubmitting}>
-          {isSubmitting ? "Реєстрація..." : "Створити акаунт"}
+          {isSubmitting ? "Реєстрація..." : "Створити обліковий запис"}
         </button>
       </form>
 
@@ -97,7 +97,7 @@ export default function RegisterPage() {
       {error ? <div className="message message-error">{error}</div> : null}
 
       <p className="muted">
-        Уже зареєстровані? <Link to="/site/auth/login">Перейти до входу</Link>.
+        Уже маєте обліковий запис? <Link to="/site/auth/login">Перейти до входу</Link>.
       </p>
     </section>
   );

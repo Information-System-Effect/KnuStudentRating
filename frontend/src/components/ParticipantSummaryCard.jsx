@@ -20,7 +20,7 @@ export default function ParticipantSummaryCard({ participant }) {
             {participant.groupName || "-"}
           </p>
           <Link to={profileLink(participant.code)} className="inline-link">
-            Відкрити профіль
+            Переглянути профіль
           </Link>
         </div>
       </div>

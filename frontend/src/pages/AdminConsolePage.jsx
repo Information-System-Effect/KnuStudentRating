@@ -465,7 +465,7 @@ export default function AdminConsolePage() {
       const result = await authApi(`/api/admin/projects/${encodeURIComponent(project.id)}/purge`, {
         method: "DELETE",
       });
-      setMessage(result || `Проєкт #${project.id} видалено назавжди.`);
+      setMessage(result || `Проєкт #${project.id} видалено безповоротно.`);
       await loadAdminData();
     } catch (submitError) {
       setError(submitError.message);
@@ -649,8 +649,8 @@ export default function AdminConsolePage() {
   return (
     <div className="page-stack">
       <section className="hero hero-short">
-        <p className="hero-kicker">Адмінка</p>
-        <h1 className="hero-title">Адмін-панель платформи</h1>
+        <p className="hero-kicker">Адміністрування</p>
+        <h1 className="hero-title">Панель адміністрування платформи</h1>
         <p className="hero-text">
           Єдиний центр керування заявками, життєвим циклом проєктів, учасниками та ролями користувачів.
         </p>
@@ -659,7 +659,7 @@ export default function AdminConsolePage() {
       {message ? <div className="message message-success">{message}</div> : null}
       {error ? <div className="message message-error">{error}</div> : null}
 
-      {isLoading ? <section className="panel">Завантаження даних адмін-панелі...</section> : null}
+      {isLoading ? <section className="panel">Завантаження даних панелі адміністрування...</section> : null}
 
       <section className="admin-kpi-grid">
         <article className="panel admin-kpi-card">
@@ -829,11 +829,11 @@ export default function AdminConsolePage() {
                 type="search"
                 value={projectStudentQuery}
                 onChange={(event) => setProjectStudentQuery(event.target.value)}
-                placeholder="Почніть вводити ім'я, код або email студента"
+                placeholder="Введіть ім'я, код або електронну адресу студента"
               />
               {projectStudentQuery.trim() ? (
                 <div className="picker-menu">
-                  {!studentPickerSuggestions.length ? <p className="muted">Нічого не знайдено.</p> : null}
+                  {!studentPickerSuggestions.length ? <p className="muted">Результатів не знайдено.</p> : null}
                   {studentPickerSuggestions.map((user) => (
                     <button
                       key={`student-pick-${user.userId}`}
@@ -849,7 +849,7 @@ export default function AdminConsolePage() {
                   ))}
                 </div>
               ) : (
-                <p className="muted">Введіть частину імені, коду або email для пошуку.</p>
+                <p className="muted">Введіть частину імені, коду або електронної адреси для пошуку.</p>
               )}
               <div className="picker-selected">
                 {!selectedStudentUsers.length ? <p className="muted">Студентів ще не додано.</p> : null}
@@ -875,11 +875,11 @@ export default function AdminConsolePage() {
                 type="search"
                 value={projectTeacherQuery}
                 onChange={(event) => setProjectTeacherQuery(event.target.value)}
-                placeholder="Почніть вводити ім'я, код або email викладача"
+                placeholder="Введіть ім'я, код або електронну адресу викладача"
               />
               {projectTeacherQuery.trim() ? (
                 <div className="picker-menu">
-                  {!teacherPickerSuggestions.length ? <p className="muted">Нічого не знайдено.</p> : null}
+                  {!teacherPickerSuggestions.length ? <p className="muted">Результатів не знайдено.</p> : null}
                   {teacherPickerSuggestions.map((user) => (
                     <button
                       key={`teacher-pick-${user.userId}`}
@@ -897,7 +897,7 @@ export default function AdminConsolePage() {
                   ))}
                 </div>
               ) : (
-                <p className="muted">Введіть частину імені, коду або email для пошуку.</p>
+                <p className="muted">Введіть частину імені, коду або електронної адреси для пошуку.</p>
               )}
               <div className="picker-selected">
                 {!selectedTeacherUsers.length ? <p className="muted">Викладачів або менторів ще не додано.</p> : null}
@@ -990,7 +990,7 @@ export default function AdminConsolePage() {
                       onClick={() => quickCompleteProject(project)}
                       disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
                     >
-                      {isCompleted ? "Проєкт уже завершено" : "Завершити зараз (+24 год)"}
+                      {isCompleted ? "Проєкт уже завершено" : "Завершити негайно (+24 год)"}
                     </button>
                     <button
                       type="button"
@@ -1007,7 +1007,7 @@ export default function AdminConsolePage() {
                         onClick={() => purgeProject(project)}
                         disabled={lifecycleSaving || memberSaving || deletingProject || purgingProject}
                       >
-                        {purgingProject ? "Знищення..." : "Видалити назавжди"}
+                        {purgingProject ? "Знищення..." : "Видалити безповоротно"}
                       </button>
                     ) : null}
                   </div>
@@ -1076,7 +1076,7 @@ export default function AdminConsolePage() {
                         onClick={() => upsertProjectMember(project)}
                         disabled={memberSaving || lifecycleSaving || deletingProject || purgingProject}
                       >
-                        {memberSaving ? "Оновлення..." : "Додати/оновити"}
+                        {memberSaving ? "Оновлення..." : "Додати або оновити"}
                       </button>
                     </div>
                   </div>
@@ -1140,7 +1140,7 @@ export default function AdminConsolePage() {
           </section>
 
           <section className="panel panel-alt">
-            <h3 className="panel-title">Створити акаунт викладача</h3>
+            <h3 className="panel-title">Створити обліковий запис викладача</h3>
             <form onSubmit={createTeacherAccount} className="form-grid">
               <label className="field">
                 <span>Електронна пошта</span>
@@ -1175,12 +1175,12 @@ export default function AdminConsolePage() {
               </label>
 
               <label className="field">
-                <span>Коротко про себе</span>
+                <span>Короткі відомості про себе</span>
                 <textarea name="about" rows={4} value={teacherForm.about} onChange={updateTeacherField} />
               </label>
 
               <button type="submit" className="button button-primary" disabled={creatingTeacher}>
-                {creatingTeacher ? "Створення..." : "Створити акаунт"}
+                {creatingTeacher ? "Створення..." : "Створити обліковий запис"}
               </button>
             </form>
           </section>

@@ -111,9 +111,9 @@ export default function ParticipantsReviewsPage({ audience }) {
                   <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span>
                 </p>
                 <p>
-                  Дельта: <strong>{formatDelta(review.delta)}</strong>
+                  Коригування: <strong>{formatDelta(review.delta)}</strong>
                 </p>
-                <p>{review.comment || "Без коментаря."}</p>
+                <p>{review.comment || "Коментар відсутній."}</p>
                 <p className="muted">{formatDateTime(review.createdAt)}</p>
               </article>
             ))}
@@ -121,7 +121,7 @@ export default function ParticipantsReviewsPage({ audience }) {
 
           {selectedCode ? (
             <Link to={profileLink(selectedCode)} className="button button-soft inline-action">
-              Відкрити профіль
+              Переглянути профіль
             </Link>
           ) : null}
         </section>

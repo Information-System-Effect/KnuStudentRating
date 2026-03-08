@@ -227,10 +227,10 @@ export default function ParticipantsDirectoryPage({ audience }) {
                   <p>
                     <Link to={profileLink(review.authorCode)}>{review.authorCode}</Link> до{" "}
                     <Link to={profileLink(review.targetCode)}>{review.targetCode}</Link> |{" "}
-                    <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span> | дельта{" "}
+                    <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span> | коригування{" "}
                     <strong>{formatDelta(review.delta)}</strong>
                   </p>
-                  <p>{review.comment || "Без коментаря."}</p>
+                  <p>{review.comment || "Коментар відсутній."}</p>
                   <p className="muted">{formatDateTime(review.createdAt)}</p>
                 </article>
               ))}
@@ -238,7 +238,7 @@ export default function ParticipantsDirectoryPage({ audience }) {
 
             {selectedCode ? (
               <Link to={profileLink(selectedCode)} className="button button-soft inline-action">
-                Відкрити повний профіль
+                Переглянути повний профіль
               </Link>
             ) : null}
           </section>

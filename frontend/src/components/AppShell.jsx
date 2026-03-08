@@ -50,7 +50,7 @@ export default function AppShell() {
               </NavLink>
               {isAdmin ? (
                 <NavLink to="/site/admin" className={navClassName}>
-                  Адмінка
+                  Адміністрування
                 </NavLink>
               ) : null}
               <NavLink to="/site/team" className={navClassName}>
@@ -66,7 +66,7 @@ export default function AppShell() {
             {isAuthenticated ? (
               <>
                 <NavLink to="/site/auth/profile" className={navClassName}>
-                  {session.userCode || "Профіль"}
+                  {session.userCode || "Обліковий запис"}
                 </NavLink>
                 <button type="button" className="nav-btn" onClick={handleLogout}>
                   Вийти

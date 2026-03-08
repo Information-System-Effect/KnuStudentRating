@@ -148,7 +148,7 @@ export default function ProjectRequestsPage() {
       <section className="panel">
         <h2 className="panel-title">Публічна стрічка</h2>
         {isLoading ? <p>Завантаження заявок...</p> : null}
-        {!isLoading && !publicRequests.length ? <p className="muted">Поки немає заявок.</p> : null}
+        {!isLoading && !publicRequests.length ? <p className="muted">Заявки наразі відсутні.</p> : null}
 
         <div className="list-stack">
           {publicRequests.map((request) => (
@@ -182,7 +182,7 @@ export default function ProjectRequestsPage() {
           </form>
 
           <h3 className="panel-title">Мої заявки</h3>
-          {!myRequests.length ? <p className="muted">У вас ще немає заявок.</p> : null}
+          {!myRequests.length ? <p className="muted">Наразі у Вас ще немає заявок.</p> : null}
           <div className="list-stack">
             {myRequests.map((request) => (
               <article key={request.id} className="list-card">
@@ -228,7 +228,7 @@ export default function ProjectRequestsPage() {
                       Проєкт створено автоматично: <span className="mono">#{request.createdProjectId}</span>
                     </p>
                   ) : null}
-                  {request.adminComment ? <p className="muted">Поточний коментар: {request.adminComment}</p> : null}
+                  {request.adminComment ? <p className="muted">Чинний коментар адміністратора: {request.adminComment}</p> : null}
 
                   <label className="field">
                     <span>Коментар модерації</span>
