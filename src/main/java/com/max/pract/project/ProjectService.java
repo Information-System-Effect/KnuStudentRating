@@ -178,17 +178,17 @@ public class ProjectService {
 
         ProjectEntity saved = projectRepository.save(project);
         if (saved.getStatus() == ProjectStatus.COMPLETED) {
-            LocalDateTime endAt = saved.getEndAt() != null ? saved.getEndAt() : LocalDateTime.now();
-            if (saved.getEndAt() == null) {
-                saved.setEndAt(endAt);
+            LocalDateTime completionMoment = normalizeCompletionMoment(saved.getEndAt());
+            if (!completionMoment.equals(saved.getEndAt())) {
+                saved.setEndAt(completionMoment);
             }
             LocalDateTime closeAt = saved.getFeedbackDeadlineAt();
-            if (closeAt == null || !closeAt.isAfter(endAt)) {
-                closeAt = endAt.plusHours(24);
+            if (closeAt == null || !closeAt.isAfter(completionMoment)) {
+                closeAt = completionMoment.plusHours(24);
                 saved.setFeedbackDeadlineAt(closeAt);
             }
             saved = projectRepository.save(saved);
-            reviewWindowService.upsertWindow(saved.getId(), endAt, closeAt);
+            reviewWindowService.upsertWindow(saved.getId(), completionMoment, closeAt);
         }
         return toResponse(saved);
     }
@@ -304,6 +304,14 @@ public class ProjectService {
         projectMember.setId(new ProjectMemberId(projectId, userId));
         projectMember.setMemberRole(role);
         return projectMember;
+    }
+
+    private LocalDateTime normalizeCompletionMoment(LocalDateTime endAt) {
+        LocalDateTime now = LocalDateTime.now();
+        if (endAt == null || endAt.isAfter(now)) {
+            return now;
+        }
+        return endAt;
     }
 
     private long countProjectReviews(Long projectId) {

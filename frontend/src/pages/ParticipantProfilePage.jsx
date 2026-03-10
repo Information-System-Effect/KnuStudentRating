@@ -36,7 +36,7 @@ function buildVerificationChart(rating) {
 
 export default function ParticipantProfilePage() {
   const { code = "" } = useParams();
-  const { authApi, api, isAuthenticated, session } = useAuth();
+  const { authApi, api, hasRole, isAuthenticated, session } = useAuth();
 
   const [rating, setRating] = useState(null);
   const [reviews, setReviews] = useState([]);
@@ -54,6 +54,7 @@ export default function ParticipantProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const isOwner = isAuthenticated && session.userCode?.toUpperCase() === code.toUpperCase();
+  const canCreateProjectRequests = isAuthenticated && isOwner && (hasRole("STUDENT") || hasRole("TEACHER"));
 
   const loadPublicData = useCallback(async () => {
     setIsLoading(true);
@@ -398,6 +399,11 @@ export default function ParticipantProfilePage() {
               <button type="button" className="button button-soft" onClick={handleDeleteSkill}>
                 Видалити навичку
               </button>
+              {canCreateProjectRequests ? (
+                <Link to="/site/projects/requests" className="button button-soft">
+                  Подати заявку на проєкт
+                </Link>
+              ) : null}
             </div>
           </form>
         </section>

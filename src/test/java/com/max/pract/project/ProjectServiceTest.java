@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -73,6 +74,38 @@ class ProjectServiceTest {
         ArgumentCaptor<LocalDateTime> openCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         ArgumentCaptor<LocalDateTime> closeCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
         verify(reviewWindowService).upsertWindow(org.mockito.ArgumentMatchers.eq(7L), openCaptor.capture(), closeCaptor.capture());
+        assertEquals(24L, Duration.between(openCaptor.getValue(), closeCaptor.getValue()).toHours());
+    }
+
+    @Test
+    void updateLifecycleClampsFutureEndAtWhenCompletingProject() {
+        ProjectEntity project = new ProjectEntity();
+        setProjectId(project, 8L);
+        project.setTitle("Future Project");
+        project.setStatus(ProjectStatus.ACTIVE);
+
+        when(projectRepository.findById(8L)).thenReturn(Optional.of(project));
+        when(projectRepository.save(any(ProjectEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projectMemberRepository.findAllByIdProjectId(8L)).thenReturn(List.of());
+        when(appUserRepository.findAllById(List.of())).thenReturn(List.of());
+
+        UpdateProjectLifecycleRequest request = new UpdateProjectLifecycleRequest();
+        request.setStatus("COMPLETED");
+        request.setEndAt(LocalDateTime.now().plusHours(6));
+
+        LocalDateTime before = LocalDateTime.now();
+        ProjectResponse response = projectService.updateLifecycle(8L, request);
+        LocalDateTime after = LocalDateTime.now();
+
+        assertNotNull(response.endAt());
+        assertFalse(response.endAt().isAfter(after));
+        assertFalse(response.endAt().isBefore(before.minusSeconds(1)));
+        assertEquals(24L, Duration.between(response.endAt(), response.feedbackDeadlineAt()).toHours());
+
+        ArgumentCaptor<LocalDateTime> openCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> closeCaptor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(reviewWindowService).upsertWindow(org.mockito.ArgumentMatchers.eq(8L), openCaptor.capture(), closeCaptor.capture());
+        assertFalse(openCaptor.getValue().isAfter(after));
         assertEquals(24L, Duration.between(openCaptor.getValue(), closeCaptor.getValue()).toHours());
     }
 

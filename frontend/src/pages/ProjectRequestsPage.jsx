@@ -19,7 +19,7 @@ export default function ProjectRequestsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [creatingProjectRequestId, setCreatingProjectRequestId] = useState(null);
 
-  const isStudent = isAuthenticated && hasRole("STUDENT");
+  const canCreateRequests = isAuthenticated && (hasRole("STUDENT") || hasRole("TEACHER"));
   const isAdmin = isAuthenticated && hasRole("ADMIN");
 
   const loadData = useCallback(async () => {
@@ -30,7 +30,7 @@ export default function ProjectRequestsPage() {
       const publicData = await api("/api/site/projects/requests", { method: "GET" });
       setPublicRequests(publicData);
 
-      if (isStudent) {
+      if (canCreateRequests) {
         const mine = await authApi("/api/project-requests/my", { method: "GET" });
         setMyRequests(mine);
       } else {
@@ -48,7 +48,7 @@ export default function ProjectRequestsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [api, authApi, isAdmin, isStudent]);
+  }, [api, authApi, canCreateRequests, isAdmin]);
 
   useEffect(() => {
     loadData();
@@ -164,7 +164,7 @@ export default function ProjectRequestsPage() {
         </div>
       </section>
 
-      {isStudent ? (
+      {canCreateRequests ? (
         <section className="panel">
           <h2 className="panel-title">Подати заявку</h2>
           <form onSubmit={handleCreate} className="form-grid">

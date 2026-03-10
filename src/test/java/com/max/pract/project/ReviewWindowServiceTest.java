@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -72,5 +73,31 @@ class ReviewWindowServiceTest {
         project.setEndAt(endAt);
 
         assertEquals(endAt.plusHours(24), reviewWindowService.resolveFeedbackDeadline(project));
+    }
+
+    @Test
+    void assertWindowOpenNormalizesFutureCompletionDateForCompletedProject() {
+        LocalDateTime futureEndAt = LocalDateTime.now().plusHours(5);
+        LocalDateTime closeAt = LocalDateTime.now().plusHours(8);
+
+        ProjectEntity project = new ProjectEntity();
+        ReflectionTestUtils.setField(project, "id", 88L);
+        project.setStatus(ProjectStatus.COMPLETED);
+        project.setEndAt(futureEndAt);
+        project.setFeedbackDeadlineAt(closeAt);
+
+        when(reviewWindowRepository.findById(88L)).thenReturn(Optional.empty());
+        when(reviewWindowRepository.save(any(ReviewWindowEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        LocalDateTime before = LocalDateTime.now();
+        reviewWindowService.assertWindowOpen(project);
+        LocalDateTime after = LocalDateTime.now();
+
+        ArgumentCaptor<ReviewWindowEntity> captor = ArgumentCaptor.forClass(ReviewWindowEntity.class);
+        verify(reviewWindowRepository).save(captor.capture());
+        ReviewWindowEntity saved = captor.getValue();
+        assertFalse(saved.getOpenAt().isAfter(after));
+        assertFalse(saved.getOpenAt().isBefore(before.minusSeconds(1)));
+        assertEquals(closeAt, saved.getCloseAt());
     }
 }

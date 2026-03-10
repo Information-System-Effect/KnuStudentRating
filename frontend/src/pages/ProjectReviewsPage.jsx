@@ -465,12 +465,14 @@ export default function ProjectReviewsPage() {
                     value={form.categoryId}
                     onChange={updateField}
                     required={!editingReviewId}
-                    disabled={Boolean(editingReviewId) || !isSelectedProjectReviewable}
+                    disabled={Boolean(editingReviewId) || !isSelectedProjectReviewable || (!categories.length && !editingReview)}
                   >
                     {editingReview ? (
                       <option value={editingReview.categoryId}>
                         {formatCategoryLabel(editingReview.categoryCode, editingReview.categoryName)} | +/-{editingReview.maxAbsDelta}
                       </option>
+                    ) : !categories.length ? (
+                      <option value="">Категорії відсутні</option>
                     ) : (
                       categories.map((category) => (
                         <option key={category.categoryId} value={category.categoryId}>

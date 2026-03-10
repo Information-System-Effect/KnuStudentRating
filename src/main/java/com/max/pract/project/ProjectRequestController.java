@@ -19,7 +19,7 @@ public class ProjectRequestController {
     }
 
     @PostMapping("/api/project-requests")
-    @PreAuthorize("hasRole('STUDENT')")
+    @PreAuthorize("hasAnyRole('STUDENT', 'TEACHER')")
     public ApiResponse createProjectRequest(
             @AuthenticationPrincipal AppUserPrincipal principal,
             @Valid @RequestBody CreateProjectRequestRequest request

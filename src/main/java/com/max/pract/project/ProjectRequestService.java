@@ -41,8 +41,8 @@ public class ProjectRequestService {
     public ProjectRequestResponse create(Long requesterId, CreateProjectRequestRequest request) {
         AppUser requester = appUserRepository.findById(requesterId)
                 .orElseThrow(() -> new ApiBadRequestException("Author not found"));
-        if (requester.getRole() != AppRole.STUDENT) {
-            throw new ApiForbiddenException("Only students can create project requests");
+        if (requester.getRole() != AppRole.STUDENT && requester.getRole() != AppRole.TEACHER) {
+            throw new ApiForbiddenException("Only students or teachers can create project requests");
         }
 
         ProjectRequestEntity projectRequest = new ProjectRequestEntity();

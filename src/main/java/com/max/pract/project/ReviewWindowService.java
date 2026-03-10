@@ -47,11 +47,22 @@ public class ReviewWindowService {
         if (project == null) {
             return null;
         }
-        if (project.getFeedbackDeadlineAt() != null) {
+        if (project.getFeedbackDeadlineAt() != null && project.getStatus() != ProjectStatus.COMPLETED) {
             return project.getFeedbackDeadlineAt();
         }
-        if (project.getStatus() == ProjectStatus.COMPLETED && project.getEndAt() != null) {
-            return project.getEndAt().plusHours(24);
+        if (project.getStatus() == ProjectStatus.COMPLETED) {
+            LocalDateTime completionMoment = normalizeCompletionMoment(
+                    project.getEndAt(),
+                    LocalDateTime.now(),
+                    project.getFeedbackDeadlineAt()
+            );
+            if (completionMoment == null) {
+                return null;
+            }
+            if (project.getFeedbackDeadlineAt() != null && project.getFeedbackDeadlineAt().isAfter(completionMoment)) {
+                return project.getFeedbackDeadlineAt();
+            }
+            return completionMoment.plusHours(24);
         }
         return null;
     }
@@ -95,14 +106,17 @@ public class ReviewWindowService {
             throw new ApiForbiddenException("Reviews are available only after project completion");
         }
 
+        LocalDateTime now = LocalDateTime.now();
         LocalDateTime closeAt = resolveFeedbackDeadline(project);
         if (closeAt == null) {
             throw new ApiForbiddenException("Review window is not configured for this project");
         }
 
-        LocalDateTime openAt = project.getEndAt() != null ? project.getEndAt() : closeAt.minusHours(24);
+        LocalDateTime openAt = normalizeCompletionMoment(project.getEndAt(), now, project.getFeedbackDeadlineAt());
+        if (openAt == null) {
+            throw new ApiForbiddenException("Review window is not configured for this project");
+        }
         LocalDateTime safeCloseAt = closeAt.isAfter(openAt) ? closeAt : openAt.plusSeconds(1);
-        LocalDateTime now = LocalDateTime.now();
         boolean shouldBeClosed = !safeCloseAt.isAfter(now);
 
         ReviewWindowEntity window = reviewWindowRepository.findById(project.getId()).orElseGet(ReviewWindowEntity::new);
@@ -127,5 +141,15 @@ public class ReviewWindowService {
                 || !Objects.equals(window.getOpenAt(), openAt)
                 || !Objects.equals(window.getCloseAt(), closeAt)
                 || !Objects.equals(Boolean.TRUE.equals(window.getClosed()), closed);
+    }
+
+    private LocalDateTime normalizeCompletionMoment(LocalDateTime endAt, LocalDateTime now, LocalDateTime fallbackDeadline) {
+        if (endAt == null) {
+            return fallbackDeadline == null ? null : now;
+        }
+        if (endAt.isAfter(now)) {
+            return now;
+        }
+        return endAt;
     }
 }
