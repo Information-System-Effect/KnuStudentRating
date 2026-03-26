@@ -1,58 +1,48 @@
 ﻿function parseGatewayMessage(raw) {
   if (typeof raw !== "string" || !raw.trim()) {
-    throw new Error("Request payload must not be empty");
+    throw new Error("Порожній запит");
   }
 
-  const normalized = raw.trim();
-  const parts = normalized.split("#");
+  const parts = raw.trim().split("#");
 
   if (parts.length < 5) {
-    throw new Error("Invalid format: expected at least 5 parts");
+    throw new Error("Недостатньо полів у запиті");
   }
 
   const [senderCode, targetUserCode, methodRaw, ...rest] = parts;
   const method = methodRaw.trim().toUpperCase();
 
-  if (rest.length % 2 !== 0) {
-    throw new Error("Invalid format: tail must contain key/value pairs");
-  }
-
-  const pairs = [];
-  for (let i = 0; i < rest.length; i += 2) {
-    pairs.push({
-      key: rest[i],
-      value: rest[i + 1],
-    });
-  }
-
+  // GET / DELETE -> строго 2 поля після METHOD
   if (method === "GET" || method === "DELETE") {
-    if (pairs.length < 1) {
-      throw new Error(`Invalid format: "${method}" requires at least one key/value pair`);
+    if (rest.length !== 2) {
+      throw new Error(`Для методу "${method}" очікується 5 полів`);
     }
 
-    const [{ key: targetField, value: opParams }] = pairs;
+    const [targetField, opParams] = rest;
 
     return {
       senderCode,
       targetUserCode,
       method,
-      mode: pairs.length === 1 ? "single" : "multi",
+      mode: "single",
       targetField,
       opParams,
-      pairs,
-      rawMessage: normalized,
     };
   }
 
+  // PATCH / PUT -> одна або багато змін
   if (method === "PATCH" || method === "PUT") {
-    if (pairs.length < 1) {
-      throw new Error(`Invalid format: "${method}" requires at least one key/value pair`);
+    if (rest.length < 2 || rest.length % 2 !== 0) {
+      throw new Error('Для методу "PATCH" або "PUT" після нього мають іти пари');
     }
 
-    const changes = pairs.map(({ key, value }) => ({
-      targetField: key,
-      changeValue: value,
-    }));
+    const changes = [];
+    for (let i = 0; i < rest.length; i += 2) {
+      changes.push({
+        targetField: rest[i],
+        changeValue: rest[i + 1],
+      });
+    }
 
     return {
       senderCode,
@@ -60,18 +50,16 @@
       method,
       mode: changes.length === 1 ? "single" : "multi",
       changes,
-      pairs,
-      rawMessage: normalized,
     };
   }
 
+  // Невідомий метод — далі помилку дасть валідатор
   return {
     senderCode,
     targetUserCode,
     method,
     mode: "unknown",
-    pairs,
-    rawMessage: normalized,
+    rawRest: rest,
   };
 }
 

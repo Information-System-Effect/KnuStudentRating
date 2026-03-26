@@ -1,83 +1,75 @@
 ﻿const { ALLOWED_OPERATIONS } = require("../utils/constants");
 
-const USER_CODE_RE = /^[UT]\d+$/;
-const FIELD_RE = /^[A-Za-z0-9_]+$/;
-const LEGACY_NUMERIC_RE = /^[+-]?\d+(\.\d+)?$/;
-
-function stripWrappingQuotes(value) {
-  if (typeof value !== "string") {
-    return "";
-  }
-  const trimmed = value.trim();
-  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
-    return trimmed.slice(1, -1);
-  }
-  return trimmed;
-}
-
-function normalizeLegacyNumeric(value) {
-  const trimmed = stripWrappingQuotes(value);
-  if (
-    trimmed.length >= 4 &&
-    (trimmed.startsWith('+"') || trimmed.startsWith('-"')) &&
-    trimmed.endsWith('"')
-  ) {
-    return trimmed.charAt(0) + trimmed.slice(2, -1);
-  }
-  return trimmed;
-}
-
 function isValidUserCode(value) {
-  return USER_CODE_RE.test((value || "").trim());
+  return /^[A-Za-z0-9_-]+$/.test((value || "").trim());
 }
 
 function isValidTargetField(value) {
-  return FIELD_RE.test((value || "").trim());
+  return /^[A-Z0-9_]+$/i.test((value || "").trim());
 }
 
-function isValidChangeValue(rawValue) {
-  const value = (rawValue || "").trim();
-  if (!value) {
+function isValidChangeValue(value) {
+  const trimmed = (value || "").trim();
+
+  // лише цілі числа зі знаком або без
+  if (!/^[+-]?\d+$/.test(trimmed)) {
     return false;
   }
 
-  const upper = value.toUpperCase();
-  if (upper.startsWith("SET:") || upper.startsWith("ADD:")) {
-    const rawNumber = value.slice(4);
-    const normalized = normalizeLegacyNumeric(rawNumber);
-    return LEGACY_NUMERIC_RE.test(normalized);
+  const num = Number(trimmed);
+
+  // обмеження за старою логікою
+  return num >= -20 && num <= 20;
+}
+
+function isValidQueryParams(value) {
+  const trimmed = (value || "").trim();
+
+  // допускаємо порожній рядок
+  if (trimmed === "") {
+    return true;
   }
 
-  return LEGACY_NUMERIC_RE.test(normalizeLegacyNumeric(value));
+  // формат: key=value;key=value
+  return /^([a-zA-Z0-9_]+=[^;#]*)(;[a-zA-Z0-9_]+=[^;#]*)*$/.test(trimmed);
 }
 
 function validateParsedMessage(parsed) {
   const errors = [];
 
   if (!isValidUserCode(parsed.senderCode)) {
-    errors.push("Invalid senderCode: expected U<digits> or T<digits>");
+    errors.push("Невірний senderCode");
   }
 
-  if (parsed.targetUserCode !== "_" && !isValidUserCode(parsed.targetUserCode)) {
-    errors.push("Invalid targetUserCode: expected U<digits>, T<digits> or _");
+  if (
+    parsed.targetUserCode !== "_" &&
+    !isValidUserCode(parsed.targetUserCode)
+  ) {
+    errors.push("Невірний targetUserCode");
   }
 
   if (!ALLOWED_OPERATIONS.includes(parsed.method)) {
-    errors.push("Unsupported action");
+    errors.push("Невірна операція");
   }
 
-  if (Array.isArray(parsed.pairs)) {
-    for (const pair of parsed.pairs) {
-      if (!isValidTargetField(pair.key)) {
-        errors.push(`Invalid key: ${pair.key}`);
-      }
+  if (parsed.method === "GET" || parsed.method === "DELETE") {
+    if (!isValidTargetField(parsed.targetField)) {
+      errors.push("Невірний TARGET_FIELD");
+    }
+
+    if (!isValidQueryParams(parsed.opParams)) {
+      errors.push("Невірний формат параметрів запиту");
     }
   }
 
   if (parsed.method === "PUT" || parsed.method === "PATCH") {
     for (const change of parsed.changes || []) {
+      if (!isValidTargetField(change.targetField)) {
+        errors.push(`Невірний TARGET_FIELD: ${change.targetField}`);
+      }
+
       if (!isValidChangeValue(change.changeValue)) {
-        errors.push(`Invalid change value: ${change.changeValue}`);
+        errors.push(`Невірний формат зміни: ${change.changeValue}`);
       }
     }
   }
