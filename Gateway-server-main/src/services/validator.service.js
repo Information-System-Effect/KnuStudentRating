@@ -1,4 +1,4 @@
-﻿const { ALLOWED_OPERATIONS } = require("../utils/constants");
+﻿const { ALLOWED_OPERATIONS, ALLOWED_CATEGORIES } = require("../utils/constants");
 
 function isValidUserCode(value) {
   return /^[A-Za-z0-9_-]+$/.test((value || "").trim());
@@ -34,15 +34,21 @@ function isValidQueryParams(value) {
   return /^([a-zA-Z0-9_]+=[^;#]*)(;[a-zA-Z0-9_]+=[^;#]*)*$/.test(trimmed);
 }
 
+function isAllowedCategory(value) {
+  const normalized = (value || "").trim().toUpperCase();
+  return ALLOWED_CATEGORIES.includes(normalized);
+}
+
 function validateParsedMessage(parsed) {
   const errors = [];
+  const hasTargetUser = parsed.targetUserCode !== "_";
 
   if (!isValidUserCode(parsed.senderCode)) {
     errors.push("Невірний senderCode");
   }
 
   if (
-    parsed.targetUserCode !== "_" &&
+    hasTargetUser !== "_" &&
     !isValidUserCode(parsed.targetUserCode)
   ) {
     errors.push("Невірний targetUserCode");
@@ -60,12 +66,24 @@ function validateParsedMessage(parsed) {
     if (!isValidQueryParams(parsed.opParams)) {
       errors.push("Невірний формат параметрів запиту");
     }
+
+    if (
+      hasTargetUser &&
+      isValidTargetField(parsed.targetField) &&
+      !isAllowedCategory(parsed.targetField)
+    ) {
+      errors.push(`Невірна категорія: ${parsed.targetField}`);
+    }
   }
 
   if (parsed.method === "PUT" || parsed.method === "PATCH") {
     for (const change of parsed.changes || []) {
       if (!isValidTargetField(change.targetField)) {
         errors.push(`Невірний TARGET_FIELD: ${change.targetField}`);
+      }
+
+      if (hasTargetUser && !isAllowedCategory(change.targetField)) {
+        errors.push(`Невірна категорія: ${change.targetField}`);
       }
 
       if (!isValidChangeValue(change.changeValue)) {
