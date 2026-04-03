@@ -1,5 +1,7 @@
 ﻿const { parseGatewayMessage } = require("../services/parser.service");
-const { validateParsedMessage } = require("../services/validator.service");
+const { validateBaseMessage } = require("../services/base-validator.service");
+const { detectGatewayTemplate } = require("../services/template-detector.service");
+const { validateTemplateMessage } = require("../services/template-validator.service");
 const { forwardToBackend } = require("../services/forwarder.service");
 
 async function handleGatewayMessage(req, res) {
@@ -18,7 +20,7 @@ async function handleGatewayMessage(req, res) {
 
   let parsed;
 
-  // 1) Парсинг
+  //Parsing
   try {
     parsed = parseGatewayMessage(rawMessage);
   } catch (error) {
@@ -32,23 +34,42 @@ async function handleGatewayMessage(req, res) {
     });
   }
 
-  // 2) Валідація
-  const validation = validateParsedMessage(parsed);
-  if (!validation.ok) {
+  //Basic validation of structure and required fields
+  const baseValidation = validateBaseMessage(parsed);
+  if (!baseValidation.ok) {
     return res.status(400).json({
       ok: false,
       code: 400,
       error: {
         type: "VALIDATION_ERROR",
-        message: "Запит не пройшов валідацію",
-        details: validation.errors,
+        message: "Запит не пройшов базову валідацію",
+        details: baseValidation.errors,
       },
     });
   }
 
-  // 3) Переадресація на backend
+  // Detecting request template
+  const templateInfo = detectGatewayTemplate(parsed);
+
+  // Validation of template-specific rules
+  const templateValidation = validateTemplateMessage(parsed, templateInfo);
+  if (!templateValidation.ok) {
+    return res.status(400).json({
+      ok: false,
+      code: 400,
+      error: {
+        type: "TEMPLATE_VALIDATION_ERROR",
+        message: "Запит не пройшов перевірку шаблону",
+        details: templateValidation.errors,
+      },
+    });
+  }
+
+  // Forwarding to backend
   try {
     const backendResult = await forwardToBackend(rawMessage, {
+      parsed,
+      templateInfo,
       authorization: req.get("authorization"),
       requestId: req.get("x-request-id"),
     });
