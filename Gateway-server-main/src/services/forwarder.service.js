@@ -20,11 +20,27 @@ function signPayload(payload, secret) {
     .digest("hex");
 }
 
-async function forwardToBackend(rawMessage, options = {}) {
-  const backendUrl = process.env.BACKEND_URL;
-  if (!backendUrl) {
-    throw new Error("BACKEND_URL is not configured");
+function resolveBackendUrl(templateInfo) {
+  const templateType =
+    typeof templateInfo === "string" ? templateInfo : templateInfo?.type;
+
+  if (templateType === "rating") {
+    if (!process.env.BACKEND_RATING_URL) {
+      throw new Error("BACKEND_RATING_URL is not configured");
+    }
+    return process.env.BACKEND_RATING_URL;
   }
+
+  const mainBackendUrl = process.env.BACKEND_MAIN_URL || process.env.BACKEND_URL;
+  if (!mainBackendUrl) {
+    throw new Error("BACKEND_MAIN_URL or BACKEND_URL is not configured");
+  }
+
+  return mainBackendUrl;
+}
+
+async function forwardToBackend(rawMessage, options = {}) {
+  const backendUrl = resolveBackendUrl(options.templateInfo);
 
   const gatewaySecret = process.env.GATEWAY_SHARED_SECRET;
   if (!gatewaySecret) {
