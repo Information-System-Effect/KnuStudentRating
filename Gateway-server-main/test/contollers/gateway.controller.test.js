@@ -2,8 +2,16 @@ jest.mock("../../src/services/parser.service", () => ({
   parseGatewayMessage: jest.fn(),
 }));
 
-jest.mock("../../src/services/validator.service", () => ({
-  validateParsedMessage: jest.fn(),
+jest.mock("../../src/services/base-validator.service", () => ({
+  validateBaseMessage: jest.fn(),
+}));
+
+jest.mock("../../src/services/template-detector.service", () => ({
+  detectGatewayTemplate: jest.fn(),
+}));
+
+jest.mock("../../src/services/template-validator.service", () => ({
+  validateTemplateMessage: jest.fn(),
 }));
 
 jest.mock("../../src/services/forwarder.service", () => ({
@@ -12,7 +20,9 @@ jest.mock("../../src/services/forwarder.service", () => ({
 
 const { handleGatewayMessage } = require("../../src/controllers/gateway.controller");
 const { parseGatewayMessage } = require("../../src/services/parser.service");
-const { validateParsedMessage } = require("../../src/services/validator.service");
+const { validateBaseMessage } = require("../../src/services/base-validator.service");
+const { detectGatewayTemplate } = require("../../src/services/template-detector.service");
+const { validateTemplateMessage } = require("../../src/services/template-validator.service");
 const { forwardToBackend } = require("../../src/services/forwarder.service");
 
 function createMockRes() {
@@ -52,7 +62,9 @@ describe("handleGatewayMessage", () => {
     });
 
     expect(parseGatewayMessage).not.toHaveBeenCalled();
-    expect(validateParsedMessage).not.toHaveBeenCalled();
+    expect(validateBaseMessage).not.toHaveBeenCalled();
+    expect(detectGatewayTemplate).not.toHaveBeenCalled();
+    expect(validateTemplateMessage).not.toHaveBeenCalled();
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
@@ -77,11 +89,13 @@ describe("handleGatewayMessage", () => {
       },
     });
 
-    expect(validateParsedMessage).not.toHaveBeenCalled();
+    expect(validateBaseMessage).not.toHaveBeenCalled();
+    expect(detectGatewayTemplate).not.toHaveBeenCalled();
+    expect(validateTemplateMessage).not.toHaveBeenCalled();
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("returns 400 on validation error", async () => {
+  test("returns 400 on base validation error", async () => {
     const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+5" });
     const res = createMockRes();
 
@@ -94,22 +108,71 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateParsedMessage.mockReturnValue({
+    validateBaseMessage.mockReturnValue({
       ok: false,
-      errors: ["Невірна категорія: TEAMWORK"],
+      errors: ["Невірний формат зміни: +50"],
     });
 
     await handleGatewayMessage(req, res);
 
     expect(parseGatewayMessage).toHaveBeenCalledWith("U1#U2#PATCH#TEAMWORK#+5");
-    expect(validateParsedMessage).toHaveBeenCalledWith(parsed);
+    expect(validateBaseMessage).toHaveBeenCalledWith(parsed);
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 400,
       error: {
         type: "VALIDATION_ERROR",
-        message: "Запит не пройшов валідацію",
+        message: "Запит не пройшов базову валідацію",
+        details: ["Невірний формат зміни: +50"],
+      },
+    });
+
+    expect(detectGatewayTemplate).not.toHaveBeenCalled();
+    expect(validateTemplateMessage).not.toHaveBeenCalled();
+    expect(forwardToBackend).not.toHaveBeenCalled();
+  });
+
+  test("returns 400 on template validation error", async () => {
+    const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+5" });
+    const res = createMockRes();
+
+    const parsed = {
+      senderCode: "U1",
+      targetUserCode: "U2",
+      method: "PATCH",
+      mode: "single",
+      changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
+    };
+
+    const templateInfo = {
+      type: "rating",
+      targetBackend: "rating",
+    };
+
+    parseGatewayMessage.mockReturnValue(parsed);
+    validateBaseMessage.mockReturnValue({
+      ok: true,
+      errors: [],
+    });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({
+      ok: false,
+      errors: ["Невірна категорія: TEAMWORK"],
+    });
+
+    await handleGatewayMessage(req, res);
+
+    expect(detectGatewayTemplate).toHaveBeenCalledWith(parsed);
+    expect(validateTemplateMessage).toHaveBeenCalledWith(parsed, templateInfo);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      code: 400,
+      error: {
+        type: "TEMPLATE_VALIDATION_ERROR",
+        message: "Запит не пройшов перевірку шаблону",
         details: ["Невірна категорія: TEAMWORK"],
       },
     });
@@ -135,8 +198,18 @@ describe("handleGatewayMessage", () => {
       changes: [{ targetField: "LANG_JAVA", changeValue: "+10" }],
     };
 
+    const templateInfo = {
+      type: "rating",
+      targetBackend: "rating",
+    };
+
     parseGatewayMessage.mockReturnValue(parsed);
-    validateParsedMessage.mockReturnValue({
+    validateBaseMessage.mockReturnValue({
+      ok: true,
+      errors: [],
+    });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({
       ok: true,
       errors: [],
     });
@@ -150,6 +223,8 @@ describe("handleGatewayMessage", () => {
     expect(forwardToBackend).toHaveBeenCalledWith(
       "U1#U2#PATCH#LANG_JAVA#+10",
       {
+        parsed,
+        templateInfo,
         authorization: "Bearer token123",
         requestId: "req-001",
       }
@@ -182,8 +257,18 @@ describe("handleGatewayMessage", () => {
       opParams: "page=1",
     };
 
+    const templateInfo = {
+      type: "general",
+      targetBackend: "main",
+    };
+
     parseGatewayMessage.mockReturnValue(parsed);
-    validateParsedMessage.mockReturnValue({
+    validateBaseMessage.mockReturnValue({
+      ok: true,
+      errors: [],
+    });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({
       ok: true,
       errors: [],
     });
@@ -197,6 +282,8 @@ describe("handleGatewayMessage", () => {
     expect(forwardToBackend).toHaveBeenCalledWith(
       "U1#_#GET#STUDENTS#page=1",
       {
+        parsed,
+        templateInfo,
         authorization: "Bearer token123",
         requestId: "req-002",
       }
@@ -225,8 +312,18 @@ describe("handleGatewayMessage", () => {
       changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
     };
 
+    const templateInfo = {
+      type: "rating",
+      targetBackend: "rating",
+    };
+
     parseGatewayMessage.mockReturnValue(parsed);
-    validateParsedMessage.mockReturnValue({
+    validateBaseMessage.mockReturnValue({
+      ok: true,
+      errors: [],
+    });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({
       ok: true,
       errors: [],
     });
@@ -266,8 +363,18 @@ describe("handleGatewayMessage", () => {
       changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
     };
 
+    const templateInfo = {
+      type: "rating",
+      targetBackend: "rating",
+    };
+
     parseGatewayMessage.mockReturnValue(parsed);
-    validateParsedMessage.mockReturnValue({
+    validateBaseMessage.mockReturnValue({
+      ok: true,
+      errors: [],
+    });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({
       ok: true,
       errors: [],
     });
@@ -302,8 +409,18 @@ describe("handleGatewayMessage", () => {
       opParams: "page=1",
     };
 
+    const templateInfo = {
+      type: "general",
+      targetBackend: "main",
+    };
+
     parseGatewayMessage.mockReturnValue(parsed);
-    validateParsedMessage.mockReturnValue({
+    validateBaseMessage.mockReturnValue({
+      ok: true,
+      errors: [],
+    });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({
       ok: true,
       errors: [],
     });
@@ -317,6 +434,8 @@ describe("handleGatewayMessage", () => {
     expect(forwardToBackend).toHaveBeenCalledWith(
       "U1#_#GET#STUDENTS#page=1",
       {
+        parsed,
+        templateInfo,
         authorization: undefined,
         requestId: undefined,
       }
