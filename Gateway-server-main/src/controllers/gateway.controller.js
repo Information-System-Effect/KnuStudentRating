@@ -7,6 +7,8 @@ const { forwardToBackend } = require("../services/forwarder.service");
 
 async function handleGatewayMessage(req, res) {
   const rawMessage = req.body;
+  const authorization = req.get("authorization");
+  const requestId = req.get("x-request-id");
 
   if (typeof rawMessage !== "string" || !rawMessage.trim()) {
     return res.status(400).json({
@@ -95,8 +97,8 @@ async function handleGatewayMessage(req, res) {
     const backendResult = await forwardToBackend(rawMessage, {
       parsed,
       templateInfo,
-      authorization: req.get("authorization"),
-      requestId: req.get("x-request-id"),
+      authorization,
+      requestId,
     });
 
     if (typeof backendResult.body === "string") {

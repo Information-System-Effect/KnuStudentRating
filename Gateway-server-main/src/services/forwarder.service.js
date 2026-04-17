@@ -1,9 +1,26 @@
 ﻿const crypto = require("crypto");
 
+/**
+ * Генерує одноразовий nonce для внутрішнього gateway-запиту.
+ * Використовується backend'ом для захисту від replay-атак.
+ *
+ * @returns {string}
+ */
 function generateNonce() {
   return crypto.randomBytes(16).toString("hex");
 }
 
+/**
+ * Формує payload, який буде підписано через HMAC.
+ * Порядок полів має бути однаковим і на gateway, і на backend.
+ *
+ * @param {Object} params
+ * @param {string} params.rawMessage
+ * @param {string|number} params.timestamp
+ * @param {string} params.nonce
+ * @param {string} params.requestId
+ * @returns {string}
+ */
 function buildSignaturePayload({ rawMessage, timestamp, nonce, requestId }) {
   return [
     rawMessage ?? "",
@@ -13,6 +30,13 @@ function buildSignaturePayload({ rawMessage, timestamp, nonce, requestId }) {
   ].join("|");
 }
 
+/**
+ * Обчислює HMAC-SHA256 підпис для внутрішнього запиту шлюзу.
+ *
+ * @param {string} payload
+ * @param {string} secret
+ * @returns {string}
+ */
 function signPayload(payload, secret) {
   return crypto
     .createHmac("sha256", secret)
@@ -20,6 +44,18 @@ function signPayload(payload, secret) {
     .digest("hex");
 }
 
+/**
+ * Визначає, на який backend треба відправити запит,
+ * залежно від типу шаблону.
+ *
+ * Підтримувані типи:
+ * - rating  -> BACKEND_RATING_URL
+ * - general -> BACKEND_MAIN_URL або BACKEND_URL
+ *
+ * @param {string|Object} templateInfo
+ * @returns {string}
+ * @throws {Error}
+ */
 function resolveBackendUrl(templateInfo) {
   const templateType =
     typeof templateInfo === "string" ? templateInfo : templateInfo?.type;
@@ -31,7 +67,9 @@ function resolveBackendUrl(templateInfo) {
     return process.env.BACKEND_RATING_URL;
   }
 
-  const mainBackendUrl = process.env.BACKEND_MAIN_URL || process.env.BACKEND_URL;
+  const mainBackendUrl =
+    process.env.BACKEND_MAIN_URL || process.env.BACKEND_URL;
+
   if (!mainBackendUrl) {
     throw new Error("BACKEND_MAIN_URL or BACKEND_URL is not configured");
   }
@@ -39,6 +77,31 @@ function resolveBackendUrl(templateInfo) {
   return mainBackendUrl;
 }
 
+/**
+ * Пересилає вже валідний gateway-запит на відповідний backend.
+ *
+ * На gateway виконується:
+ * - вибір backend за templateInfo
+ * - генерація timestamp
+ * - генерація nonce
+ * - побудова HMAC-підпису
+ * - додавання службових security headers
+ *
+ * На backend ці дані вже перевіряються, зокрема:
+ * - gateway secret
+ * - signature
+ * - timestamp
+ * - nonce uniqueness через Redis
+ *
+ * @param {string} rawMessage
+ * @param {Object} [options={}]
+ * @param {Object|string} [options.templateInfo]
+ * @param {Object} [options.parsed]
+ * @param {string} [options.authorization]
+ * @param {string} [options.requestId]
+ * @returns {Promise<{statusCode:number, body:any}>}
+ * @throws {Error}
+ */
 async function forwardToBackend(rawMessage, options = {}) {
   const backendUrl = resolveBackendUrl(options.templateInfo);
 
