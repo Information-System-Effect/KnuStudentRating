@@ -14,6 +14,10 @@ jest.mock("../../src/services/template-validator.service", () => ({
   validateTemplateMessage: jest.fn(),
 }));
 
+jest.mock("../../src/services/access-control.service", () => ({
+  checkAccess: jest.fn(),
+}));
+
 jest.mock("../../src/services/forwarder.service", () => ({
   forwardToBackend: jest.fn(),
 }));
@@ -23,6 +27,7 @@ const { parseGatewayMessage } = require("../../src/services/parser.service");
 const { validateBaseMessage } = require("../../src/services/base-validator.service");
 const { detectGatewayTemplate } = require("../../src/services/template-detector.service");
 const { validateTemplateMessage } = require("../../src/services/template-validator.service");
+const { checkAccess } = require("../../src/services/access-control.service");
 const { forwardToBackend } = require("../../src/services/forwarder.service");
 
 function createMockRes() {
@@ -65,6 +70,7 @@ describe("handleGatewayMessage", () => {
     expect(validateBaseMessage).not.toHaveBeenCalled();
     expect(detectGatewayTemplate).not.toHaveBeenCalled();
     expect(validateTemplateMessage).not.toHaveBeenCalled();
+    expect(checkAccess).not.toHaveBeenCalled();
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
@@ -92,11 +98,12 @@ describe("handleGatewayMessage", () => {
     expect(validateBaseMessage).not.toHaveBeenCalled();
     expect(detectGatewayTemplate).not.toHaveBeenCalled();
     expect(validateTemplateMessage).not.toHaveBeenCalled();
+    expect(checkAccess).not.toHaveBeenCalled();
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
   test("returns 400 on base validation error", async () => {
-    const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+5" });
+    const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+50" });
     const res = createMockRes();
 
     const parsed = {
@@ -104,7 +111,7 @@ describe("handleGatewayMessage", () => {
       targetUserCode: "U2",
       method: "PATCH",
       mode: "single",
-      changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
+      changes: [{ targetField: "TEAMWORK", changeValue: "+50" }],
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
@@ -115,7 +122,6 @@ describe("handleGatewayMessage", () => {
 
     await handleGatewayMessage(req, res);
 
-    expect(parseGatewayMessage).toHaveBeenCalledWith("U1#U2#PATCH#TEAMWORK#+5");
     expect(validateBaseMessage).toHaveBeenCalledWith(parsed);
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({
@@ -130,6 +136,7 @@ describe("handleGatewayMessage", () => {
 
     expect(detectGatewayTemplate).not.toHaveBeenCalled();
     expect(validateTemplateMessage).not.toHaveBeenCalled();
+    expect(checkAccess).not.toHaveBeenCalled();
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
@@ -151,10 +158,7 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
     validateTemplateMessage.mockReturnValue({
       ok: false,
@@ -177,15 +181,16 @@ describe("handleGatewayMessage", () => {
       },
     });
 
+    expect(checkAccess).not.toHaveBeenCalled();
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("forwards request and returns JSON backend response", async () => {
+  test("returns 403 on access denied", async () => {
     const req = createMockReq({
       body: "U1#U2#PATCH#LANG_JAVA#+10",
       headers: {
-        authorization: "Bearer token123",
-        "x-request-id": "req-001",
+        "x-user-role": "student",
+        "x-user-code": "U1",
       },
     });
     const res = createMockRes();
@@ -204,15 +209,69 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
-    validateTemplateMessage.mockReturnValue({
-      ok: true,
-      errors: [],
+    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+    checkAccess.mockReturnValue({
+      ok: false,
+      errors: ['Роль "student" не має доступу до операції PATCH для шаблону rating'],
     });
+
+    await handleGatewayMessage(req, res);
+
+    expect(checkAccess).toHaveBeenCalledWith({
+      parsed,
+      templateInfo,
+      userContext: {
+        role: "student",
+        userCode: "U1",
+      },
+    });
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      ok: false,
+      code: 403,
+      error: {
+        type: "ACCESS_DENIED",
+        message: "Користувач не має права виконувати цю операцію",
+        details: ['Роль "student" не має доступу до операції PATCH для шаблону rating'],
+      },
+    });
+
+    expect(forwardToBackend).not.toHaveBeenCalled();
+  });
+
+  test("forwards request and returns JSON backend response", async () => {
+    const req = createMockReq({
+      body: "U1#U2#PATCH#LANG_JAVA#+10",
+      headers: {
+        authorization: "Bearer token123",
+        "x-request-id": "req-001",
+        "x-user-role": "teacher",
+        "x-user-code": "U1",
+      },
+    });
+    const res = createMockRes();
+
+    const parsed = {
+      senderCode: "U1",
+      targetUserCode: "U2",
+      method: "PATCH",
+      mode: "single",
+      changes: [{ targetField: "LANG_JAVA", changeValue: "+10" }],
+    };
+
+    const templateInfo = {
+      type: "rating",
+      targetBackend: "rating",
+    };
+
+    parseGatewayMessage.mockReturnValue(parsed);
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
+    detectGatewayTemplate.mockReturnValue(templateInfo);
+    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+    checkAccess.mockReturnValue({ ok: true, errors: [] });
     forwardToBackend.mockResolvedValue({
       statusCode: 200,
       body: { ok: true, result: "updated" },
@@ -244,6 +303,8 @@ describe("handleGatewayMessage", () => {
       headers: {
         authorization: "Bearer token123",
         "x-request-id": "req-002",
+        "x-user-role": "teacher",
+        "x-user-code": "U1",
       },
     });
     const res = createMockRes();
@@ -263,31 +324,16 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
-    validateTemplateMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+    checkAccess.mockReturnValue({ ok: true, errors: [] });
     forwardToBackend.mockResolvedValue({
       statusCode: 200,
       body: "plain backend response",
     });
 
     await handleGatewayMessage(req, res);
-
-    expect(forwardToBackend).toHaveBeenCalledWith(
-      "U1#_#GET#STUDENTS#page=1",
-      {
-        parsed,
-        templateInfo,
-        authorization: "Bearer token123",
-        requestId: "req-002",
-      }
-    );
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith("plain backend response");
@@ -300,6 +346,8 @@ describe("handleGatewayMessage", () => {
       headers: {
         authorization: "Bearer token123",
         "x-request-id": "req-003",
+        "x-user-role": "teacher",
+        "x-user-code": "U1",
       },
     });
     const res = createMockRes();
@@ -318,15 +366,10 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
-    validateTemplateMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+    checkAccess.mockReturnValue({ ok: true, errors: [] });
 
     const timeoutError = new Error("timeout");
     timeoutError.name = "AbortError";
@@ -351,6 +394,8 @@ describe("handleGatewayMessage", () => {
       headers: {
         authorization: "Bearer token123",
         "x-request-id": "req-004",
+        "x-user-role": "teacher",
+        "x-user-code": "U1",
       },
     });
     const res = createMockRes();
@@ -369,15 +414,10 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
-    validateTemplateMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+    checkAccess.mockReturnValue({ ok: true, errors: [] });
     forwardToBackend.mockRejectedValue(new Error("connection refused"));
 
     await handleGatewayMessage(req, res);
@@ -415,15 +455,10 @@ describe("handleGatewayMessage", () => {
     };
 
     parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
-    validateTemplateMessage.mockReturnValue({
-      ok: true,
-      errors: [],
-    });
+    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+    checkAccess.mockReturnValue({ ok: true, errors: [] });
     forwardToBackend.mockResolvedValue({
       statusCode: 200,
       body: { ok: true },

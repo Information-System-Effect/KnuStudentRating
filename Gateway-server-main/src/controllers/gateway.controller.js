@@ -2,6 +2,7 @@
 const { validateBaseMessage } = require("../services/base-validator.service");
 const { detectGatewayTemplate } = require("../services/template-detector.service");
 const { validateTemplateMessage } = require("../services/template-validator.service");
+const { checkAccess } = require("../services/access-control.service");
 const { forwardToBackend } = require("../services/forwarder.service");
 
 async function handleGatewayMessage(req, res) {
@@ -20,7 +21,7 @@ async function handleGatewayMessage(req, res) {
 
   let parsed;
 
-  //Parsing
+  // 1) Парсинг
   try {
     parsed = parseGatewayMessage(rawMessage);
   } catch (error) {
@@ -34,7 +35,7 @@ async function handleGatewayMessage(req, res) {
     });
   }
 
-  //Basic validation of structure and required fields
+  // 2) Базова валідація
   const baseValidation = validateBaseMessage(parsed);
   if (!baseValidation.ok) {
     return res.status(400).json({
@@ -48,10 +49,10 @@ async function handleGatewayMessage(req, res) {
     });
   }
 
-  // Detecting request template
+  // 3) Визначення шаблону
   const templateInfo = detectGatewayTemplate(parsed);
 
-  // Validation of template-specific rules
+  // 4) Валідація шаблону
   const templateValidation = validateTemplateMessage(parsed, templateInfo);
   if (!templateValidation.ok) {
     return res.status(400).json({
@@ -65,7 +66,31 @@ async function handleGatewayMessage(req, res) {
     });
   }
 
-  // Forwarding to backend
+  // 5) Access control
+  const userContext = {
+    role: req.get("x-user-role"),
+    userCode: req.get("x-user-code"),
+  };
+
+  const accessResult = checkAccess({
+    parsed,
+    templateInfo,
+    userContext,
+  });
+
+  if (!accessResult.ok) {
+    return res.status(403).json({
+      ok: false,
+      code: 403,
+      error: {
+        type: "ACCESS_DENIED",
+        message: "Користувач не має права виконувати цю операцію",
+        details: accessResult.errors,
+      },
+    });
+  }
+
+  // 6) Переадресація на backend
   try {
     const backendResult = await forwardToBackend(rawMessage, {
       parsed,
