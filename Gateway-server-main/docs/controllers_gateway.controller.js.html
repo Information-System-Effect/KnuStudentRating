@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: controllers/gateway.controller.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: controllers/gateway.controller.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>﻿/**
+ * Контролер шлюзу для обробки текстових запитів внутрішнього протоколу.
+ *
+ * Основна послідовність обробки:
+ * 1. Отримання сирого текстового повідомлення з body.
+ * 2. Парсинг повідомлення у структурований об'єкт.
+ * 3. Базова валідація структури протоколу.
+ * 4. Визначення шаблону запиту.
+ * 5. Шаблонна валідація.
+ * 6. Перевірка прав доступу.
+ * 7. Пересилання запиту на відповідний backend.
+ */
+
+const { parseGatewayMessage } = require("../services/parser.service");
+const { validateBaseMessage } = require("../services/base-validator.service");
+const { detectGatewayTemplate } = require("../services/template-detector.service");
+const { validateTemplateMessage } = require("../services/template-validator.service");
+const { checkAccess } = require("../services/access-control.service");
+const { forwardToBackend } = require("../services/forwarder.service");
+
+/**
+ * Обробляє вхідний gateway-запит у текстовому форматі.
+ *
+ * Функція:
+ * - перевіряє наявність і коректність body;
+ * - виконує парсинг і валідацію запиту;
+ * - визначає тип шаблону;
+ * - перевіряє права доступу користувача;
+ * - пересилає валідний запит на потрібний backend.
+ *
+ * @async
+ * @function handleGatewayMessage
+ * @param {object} req - Об'єкт HTTP-запиту Express.
+ * @param {string} req.body - Сирий текстовий запит у форматі шлюзу.
+ * @param {Function} req.get - Метод читання HTTP-заголовків.
+ * @param {object} res - Об'єкт HTTP-відповіді Express.
+ * @returns {Promise&lt;object|void>} Повертає HTTP-відповідь у форматі JSON або тексту.
+ */
+async function handleGatewayMessage(req, res) {
+  const rawMessage = req.body;
+  const authorization = req.get("authorization");
+  const requestId = req.get("x-request-id");
+
+  /**
+   * Крок 0.
+   * Перевірка, що body існує, є рядком і не є порожнім.
+   * Якщо умова не виконується, повертається помилка 400.
+   */
+  if (typeof rawMessage !== "string" || !rawMessage.trim()) {
+    return res.status(400).json({
+      ok: false,
+      code: 400,
+      error: {
+        type: "BAD_REQUEST",
+        message: "Очікується непорожній text/plain у body",
+      },
+    });
+  }
+
+  let parsed;
+
+  /**
+   * Крок 1.
+   * Парсинг сирого текстового повідомлення у структурований об'єкт.
+   * Якщо парсер не зміг розпізнати формат, повертається помилка 400.
+   */
+  try {
+    parsed = parseGatewayMessage(rawMessage);
+  } catch (error) {
+    return res.status(400).json({
+      ok: false,
+      code: 400,
+      error: {
+        type: "PARSING_ERROR",
+        message: error.message,
+      },
+    });
+  }
+
+  /**
+   * Крок 2.
+   * Базова валідація структури протоколу.
+   * Тут перевіряються загальні правила:
+   * - senderCode
+   * - targetUserCode
+   * - method
+   * - targetField / changes
+   * - формат параметрів запиту
+   */
+  const baseValidation = validateBaseMessage(parsed);
+  if (!baseValidation.ok) {
+    return res.status(400).json({
+      ok: false,
+      code: 400,
+      error: {
+        type: "VALIDATION_ERROR",
+        message: "Запит не пройшов базову валідацію",
+        details: baseValidation.errors,
+      },
+    });
+  }
+
+  /**
+   * Крок 3.
+   * Визначення шаблону запиту.
+   * Наприклад, шаблон може бути "rating" або "general".
+   * Результат використовується для подальшої шаблонної валідації
+   * та вибору backend-сервера.
+   */
+  const templateInfo = detectGatewayTemplate(parsed);
+
+  /**
+   * Крок 4.
+   * Шаблонна валідація.
+   * Перевіряються правила, які залежать від конкретного типу запиту.
+   * Наприклад, для рейтингового шаблону — коректність категорій.
+   */
+  const templateValidation = validateTemplateMessage(parsed, templateInfo);
+  if (!templateValidation.ok) {
+    return res.status(400).json({
+      ok: false,
+      code: 400,
+      error: {
+        type: "TEMPLATE_VALIDATION_ERROR",
+        message: "Запит не пройшов перевірку шаблону",
+        details: templateValidation.errors,
+      },
+    });
+  }
+
+  /**
+   * Крок 5.
+   * Формування контексту користувача із заголовків запиту
+   * та перевірка прав доступу.
+   *
+   * На цьому етапі перевіряється:
+   * - роль користувача;
+   * - код автентифікованого користувача;
+   * - право виконувати конкретну операцію для визначеного шаблону.
+   */
+  const userContext = {
+    role: req.get("x-user-role"),
+    userCode: req.get("x-user-code"),
+  };
+
+  const accessResult = checkAccess({
+    parsed,
+    templateInfo,
+    userContext,
+  });
+
+  if (!accessResult.ok) {
+    return res.status(403).json({
+      ok: false,
+      code: 403,
+      error: {
+        type: "ACCESS_DENIED",
+        message: "Користувач не має права виконувати цю операцію",
+        details: accessResult.errors,
+      },
+    });
+  }
+
+  /**
+   * Крок 6.
+   * Пересилання валідного і дозволеного запиту на backend.
+   *
+   * У forwarder передаються:
+   * - rawMessage — сирий текстовий запит;
+   * - parsed — розпарсений об'єкт;
+   * - templateInfo — інформація про шаблон;
+   * - authorization — заголовок авторизації;
+   * - requestId — ідентифікатор запиту для трасування.
+   *
+   * Якщо backend повертає текст — відповідь пересилається через send().
+   * Якщо backend повертає JSON — відповідь пересилається через json().
+   */
+  try {
+    const backendResult = await forwardToBackend(rawMessage, {
+      parsed,
+      templateInfo,
+      authorization,
+      requestId,
+    });
+
+    if (typeof backendResult.body === "string") {
+      return res.status(backendResult.statusCode).send(backendResult.body);
+    }
+
+    return res.status(backendResult.statusCode).json(backendResult.body);
+  } catch (error) {
+    /**
+     * Якщо backend недоступний або запит до нього завершився timeout,
+     * шлюз повертає помилку 502.
+     */
+    const isTimeout = error &amp;&amp; error.name === "AbortError";
+
+    return res.status(502).json({
+      ok: false,
+      code: 502,
+      error: {
+        type: "BACKEND_UNAVAILABLE",
+        message: isTimeout
+          ? "Backend request timed out"
+          : `Failed to reach backend: ${error.message}`,
+      },
+    });
+  }
+}
+
+module.exports = { handleGatewayMessage };</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#ALLOWED_OPERATIONS">ALLOWED_OPERATIONS</a></li><li><a href="global.html#AVAILABLE_SUBJECTS">AVAILABLE_SUBJECTS</a></li><li><a href="global.html#DEFAULT_BACKEND_BASE_URL">DEFAULT_BACKEND_BASE_URL</a></li><li><a href="global.html#EXACT_PROXY_PATHS">EXACT_PROXY_PATHS</a></li><li><a href="global.html#FORBIDDEN_FORWARD_HEADERS">FORBIDDEN_FORWARD_HEADERS</a></li><li><a href="global.html#IGNORED_RESPONSE_HEADERS">IGNORED_RESPONSE_HEADERS</a></li><li><a href="global.html#NO_BODY_METHODS">NO_BODY_METHODS</a></li><li><a href="global.html#PORT">PORT</a></li><li><a href="global.html#PROXY_PREFIXES">PROXY_PREFIXES</a></li><li><a href="global.html#TEMPLATE_PERMISSIONS">TEMPLATE_PERMISSIONS</a></li><li><a href="global.html#app">app</a></li><li><a href="global.html#buildSignaturePayload">buildSignaturePayload</a></li><li><a href="global.html#checkAccess">checkAccess</a></li><li><a href="global.html#detectGatewayTemplate">detectGatewayTemplate</a></li><li><a href="global.html#express">express</a></li><li><a href="global.html#forwardToBackend">forwardToBackend</a></li><li><a href="global.html#generateNonce">generateNonce</a></li><li><a href="global.html#getForwardHeaders">getForwardHeaders</a></li><li><a href="global.html#handleGatewayMessage">handleGatewayMessage</a></li><li><a href="global.html#handleProxyRequest">handleProxyRequest</a></li><li><a href="global.html#isAllowedCategory">isAllowedCategory</a></li><li><a href="global.html#isValidChangeValue">isValidChangeValue</a></li><li><a href="global.html#isValidQueryParams">isValidQueryParams</a></li><li><a href="global.html#isValidTargetField">isValidTargetField</a></li><li><a href="global.html#isValidUserCode">isValidUserCode</a></li><li><a href="global.html#normalizeTemplateType">normalizeTemplateType</a></li><li><a href="global.html#parseGatewayMessage">parseGatewayMessage</a></li><li><a href="global.html#proxyToBackend">proxyToBackend</a></li><li><a href="global.html#readRequestBody">readRequestBody</a></li><li><a href="global.html#resolveBackendBaseUrl">resolveBackendBaseUrl</a></li><li><a href="global.html#resolveBackendUrl">resolveBackendUrl</a></li><li><a href="global.html#router">router</a></li><li><a href="global.html#shouldProxy">shouldProxy</a></li><li><a href="global.html#signPayload">signPayload</a></li><li><a href="global.html#validateBaseMessage">validateBaseMessage</a></li><li><a href="global.html#validateGeneralTemplate">validateGeneralTemplate</a></li><li><a href="global.html#validateRatingTemplate">validateRatingTemplate</a></li><li><a href="global.html#validateTemplateMessage">validateTemplateMessage</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri May 01 2026 17:53:43 GMT+0300 (за східноєвропейським літнім часом)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
