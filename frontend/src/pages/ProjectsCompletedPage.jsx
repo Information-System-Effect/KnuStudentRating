@@ -192,31 +192,84 @@ export default function ProjectsCompletedPage() {
   }
 
   return (
-    <div className="page-stack">
-      <section className="hero hero-short">
-        <p className="hero-kicker">Проєкти</p>
-        <h1 className="hero-title">Проєкти та команди</h1>
+    <div className="page-stack projects-page">
+      <section className="page-hero">
+        <div>
+          <p className="hero-kicker">Портфоліо проєктів</p>
+          <h1 className="hero-title">Проєкти та команди</h1>
+          <p className="hero-text">
+            Огляд активної участі, завершених командних робіт і адміністративного життєвого циклу проєктів.
+          </p>
+        </div>
+        <div className="hero-actions">
+          <Link to="/site/projects/reviews" className="button button-primary">
+            Перейти до оцінювання
+          </Link>
+          <Link to="/site/projects/requests" className="button button-soft">
+            Заявки
+          </Link>
+        </div>
       </section>
 
+      <section className="stats-grid">
+        <article className="stat-card">
+          <span className="stat-label">Завершені</span>
+          <strong className="stat-value">{sortedProjects.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span className="stat-label">Активні для мене</span>
+          <strong className="stat-value">{myActiveProjects.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span className="stat-label">У керуванні</span>
+          <strong className="stat-value">{isAdmin ? sortedAdminProjects.length : 0}</strong>
+        </article>
+      </section>
+
+      {message ? <div className="message message-success">{message}</div> : null}
+      {error ? (
+        <section className="home-error-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true" />
+          <div>
+            <h2>Не вдалося завантажити дані</h2>
+            <p>Спробуйте оновити сторінку або повторити запит пізніше.</p>
+            <span className="alert-details">{error}</span>
+          </div>
+          <button type="button" className="button button-soft" onClick={loadProjects}>
+            Спробувати ще раз
+          </button>
+        </section>
+      ) : null}
+
       {isAuthenticated ? (
-        <section className="panel">
-          <h2 className="panel-title">Мої активні проєкти</h2>
+        <section className="workspace-section">
+          <div className="section-heading">
+            <div>
+              <p className="hero-kicker">Мій робочий простір</p>
+              <h2 className="panel-title">Мої активні проєкти</h2>
+            </div>
+          </div>
           {!myActiveProjects.length ? (
-            <p className="muted">Наразі у Вас немає активних проєктів, у яких Ви є учасником або власником.</p>
+            <div className="empty-state">
+              <strong>Активних проєктів поки немає</strong>
+              <p>Коли Вас додадуть до команди, проєкт з'явиться тут з роллю, строками та складом учасників.</p>
+            </div>
           ) : (
-            <div className="list-stack">
+            <div className="project-card-grid">
               {myActiveProjects.map((project) => {
                 const currentMember = (project.members || []).find((member) => member.userId === me?.userId);
                 return (
-                  <article key={`active-${project.id}`} className="list-card">
-                    <h3>
-                      {project.title} <span className="mono">#{project.id}</span>
-                    </h3>
+                  <article key={`active-${project.id}`} className="list-card project-card">
+                    <div className="project-card-head">
+                      <h3>{project.title}</h3>
+                      <span className="status-pill status-pill-active">{formatProjectStatus(project.status)}</span>
+                    </div>
                     <p>{project.description || "Опис відсутній."}</p>
-                    <p className="muted">
-                      Статус: {formatProjectStatus(project.status)} | Ваша роль: {formatRoleLabel(currentMember?.memberRole)} |
-                      Початок: {formatDateTime(project.startAt)} | Планове завершення: {formatDateTime(project.endAt)}
-                    </p>
+                    <div className="meta-grid">
+                      <span>Роль <strong>{formatRoleLabel(currentMember?.memberRole)}</strong></span>
+                      <span>Старт <strong>{formatDateTime(project.startAt)}</strong></span>
+                      <span>План <strong>{formatDateTime(project.endAt)}</strong></span>
+                    </div>
 
                     <div className="chip-row">
                       {(project.members || []).map((member) => (
@@ -234,13 +287,18 @@ export default function ProjectsCompletedPage() {
       ) : null}
 
       {isAdmin ? (
-        <section className="panel">
-          <h2 className="panel-title">Адміністрування життєвого циклу проєктів</h2>
-          <p className="muted">
-            Звичайні користувачі можуть створювати лише заявки. Пряме створення проєктів доступне виключно в панелі
-            адміністрування.
-          </p>
-          {!sortedAdminProjects.length ? <p className="muted">Наразі немає проєктів для керування.</p> : null}
+        <section className="panel admin-lifecycle-panel">
+          <div className="section-heading">
+            <div>
+              <p className="hero-kicker">Керування</p>
+              <h2 className="panel-title">Життєвий цикл проєктів</h2>
+            </div>
+            <Link to="/site/admin" className="button button-soft">
+              Повна admin-панель
+            </Link>
+          </div>
+          <p className="muted">Швидке завершення, архівація та керування строками без переходу з проєктного огляду.</p>
+          {!sortedAdminProjects.length ? <div className="empty-state">Наразі немає проєктів для керування.</div> : null}
 
           <div className="list-stack">
             {sortedAdminProjects.map((project) => {
@@ -249,14 +307,20 @@ export default function ProjectsCompletedPage() {
               const isCompleted = project.status === "COMPLETED";
 
               return (
-                <article key={project.id} className="list-card">
-                  <h3>
-                    {project.title} <span className="mono">#{project.id}</span>
-                  </h3>
-                  <p className="muted">
-                    Поточний статус: {formatProjectStatus(project.status)} | Початок: {formatDateTime(project.startAt)} |
-                    Завершення: {formatDateTime(project.endAt)} | Оцінювання до: {formatDateTime(project.feedbackDeadlineAt)}
-                  </p>
+                <article key={project.id} className="list-card admin-project-row">
+                  <div className="project-card-head">
+                    <h3>
+                      {project.title} <span className="mono">#{project.id}</span>
+                    </h3>
+                    <span className={`status-pill status-pill-${String(project.status || "").toLowerCase()}`}>
+                      {formatProjectStatus(project.status)}
+                    </span>
+                  </div>
+                  <div className="meta-grid">
+                    <span>Початок <strong>{formatDateTime(project.startAt)}</strong></span>
+                    <span>Завершення <strong>{formatDateTime(project.endAt)}</strong></span>
+                    <span>Оцінювання до <strong>{formatDateTime(project.feedbackDeadlineAt)}</strong></span>
+                  </div>
 
                   <form className="form-grid two-col" onSubmit={(event) => handleLifecycleSubmit(event, project)}>
                     <label className="field">
@@ -303,23 +367,31 @@ export default function ProjectsCompletedPage() {
         </section>
       ) : null}
 
-      {message ? <div className="message message-success">{message}</div> : null}
-      {error ? <div className="message message-error">{error}</div> : null}
+      <section className="workspace-section">
+        <div className="section-heading">
+          <div>
+            <p className="hero-kicker">Архів завершених</p>
+            <h2 className="panel-title">Завершені проєкти</h2>
+          </div>
+        </div>
+        {isLoading ? <div className="empty-state">Завантаження проєктів...</div> : null}
+        {!isLoading && !sortedProjects.length ? <div className="empty-state">Наразі завершені проєкти відсутні.</div> : null}
 
-      <section className="panel">
-        <h2 className="panel-title">Завершені проєкти</h2>
-        {isLoading ? <p>Завантаження проєктів...</p> : null}
-        {!isLoading && !sortedProjects.length ? <p className="muted">Наразі завершені проєкти відсутні.</p> : null}
-
-        <div className="list-stack">
+        <div className="project-card-grid">
           {sortedProjects.map((project) => (
-            <article key={project.projectId} className="list-card">
-              <h3>{project.title}</h3>
+            <article key={project.projectId} className="list-card project-card">
+              <div className="project-card-head">
+                <h3>{project.title}</h3>
+                <span className={`status-pill status-pill-${String(project.status || "").toLowerCase()}`}>
+                  {formatProjectStatus(project.status)}
+                </span>
+              </div>
               <p>{project.description || "Опис відсутній."}</p>
-              <p className="muted">
-                Статус: {formatProjectStatus(project.status)} | Початок: {formatDateTime(project.startAt)} | Завершення:{" "}
-                {formatDateTime(project.endAt)} | Оцінювання до: {formatDateTime(project.feedbackDeadlineAt)}
-              </p>
+              <div className="meta-grid">
+                <span>Початок <strong>{formatDateTime(project.startAt)}</strong></span>
+                <span>Завершення <strong>{formatDateTime(project.endAt)}</strong></span>
+                <span>Оцінювання до <strong>{formatDateTime(project.feedbackDeadlineAt)}</strong></span>
+              </div>
 
               <div className="chip-row">
                 {(project.members || []).map((member) => (

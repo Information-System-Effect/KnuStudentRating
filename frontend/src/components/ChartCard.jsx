@@ -32,7 +32,12 @@ export default function ChartCard({ title, type, data, options, height = 260 }) 
 
   return (
     <section className="panel chart-panel">
-      <h3 className="panel-title">{title}</h3>
+      <div className="chart-panel-head">
+        <div>
+          <p className="hero-kicker">Аналітика</p>
+          <h3 className="panel-title">{title}</h3>
+        </div>
+      </div>
       <div className="chart-stage" style={{ height: `${height}px` }}>
         <canvas ref={canvasRef} />
       </div>

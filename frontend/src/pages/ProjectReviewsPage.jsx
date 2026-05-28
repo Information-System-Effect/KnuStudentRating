@@ -404,24 +404,93 @@ export default function ProjectReviewsPage() {
   const canCreateNewReview = categories.length > 0;
 
   return (
-    <div className="page-stack">
-      <section className="hero hero-short">
-        <p className="hero-kicker">Оцінювання</p>
-        <h1 className="hero-title">Оцінювання в межах проєктів</h1>
+    <div className="page-stack reviews-page">
+      <section className="page-hero">
+        <div>
+          <p className="hero-kicker">Студія оцінювання</p>
+          <h1 className="hero-title">Оцінювання в межах проєктів</h1>
+          <p className="hero-text">
+            Створюйте точні відгуки за категоріями, редагуйте власні оцінки та контролюйте вікна фідбеку.
+          </p>
+        </div>
+        <div className="hero-actions">
+          <a href="#review-studio" className="button button-primary">
+            Відкрити студію
+          </a>
+          <a href="#recent-reviews" className="button button-soft">
+            Останні відгуки
+          </a>
+        </div>
       </section>
 
       {message ? <div className="message message-success">{message}</div> : null}
-      {error ? <div className="message message-error">{error}</div> : null}
+      {error ? (
+        <section className="home-error-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true" />
+          <div>
+            <h2>Не вдалося завантажити дані</h2>
+            <p>Спробуйте оновити сторінку або повторити запит пізніше.</p>
+            <span className="alert-details">{error}</span>
+          </div>
+          <button type="button" className="button button-soft" onClick={refreshCurrentContext}>
+            Спробувати ще раз
+          </button>
+        </section>
+      ) : null}
+
+      <section className="stats-grid">
+        <article className="stat-card">
+          <span className="stat-label">Публічні відгуки</span>
+          <strong className="stat-value">{reviews.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span className="stat-label">Мої проєкти</span>
+          <strong className="stat-value">{projects.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span className="stat-label">Мої відгуки</span>
+          <strong className="stat-value">{authoredReviews.length}</strong>
+        </article>
+      </section>
 
       {isAuthenticated ? (
-        <section className="panel">
-          <h2 className="panel-title">Керування моїми відгуками</h2>
+        <section className="review-studio" id="review-studio">
+          <aside className="panel review-context-card">
+            <p className="hero-kicker">Контекст</p>
+            <h2 className="panel-title">Контекст оцінювання</h2>
+            <div className="detail-grid compact-detail">
+              <div>
+                <span>Проєкт</span>
+                <strong>{selectedProject?.title || "-"}</strong>
+              </div>
+              <div>
+                <span>Отримувач</span>
+                <strong>{selectedTarget?.fullName || "-"}</strong>
+              </div>
+              <div>
+                <span>Дедлайн</span>
+                <strong>{formatDateTime(projectDeadline)}</strong>
+              </div>
+              <div>
+                <span>Вікно</span>
+                <strong>{isSelectedProjectReviewable ? "Відкрите" : "Закрите"}</strong>
+              </div>
+            </div>
+          </aside>
 
-          {!projects.length ? (
-            <p className="muted">Наразі Ви не є учасником жодного проєкту.</p>
-          ) : (
-            <>
-              <form onSubmit={handleSubmit} className="form-grid two-col">
+          <section className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="hero-kicker">Форма відгуку</p>
+                <h2 className="panel-title">Керування моїми відгуками</h2>
+              </div>
+            </div>
+
+            {!projects.length ? (
+              <div className="empty-state">Наразі Ви не є учасником жодного проєкту.</div>
+            ) : (
+              <>
+                <form onSubmit={handleSubmit} className="form-grid two-col">
                 <label className="field">
                   <span>Проєкт</span>
                   <select name="projectId" value={form.projectId} onChange={updateField} required>
@@ -433,10 +502,13 @@ export default function ProjectReviewsPage() {
                   </select>
                 </label>
 
-                <p className="muted">Кінцевий строк оцінювання: {formatDateTime(projectDeadline)}</p>
+                <div className="inline-insight">
+                  <span>Кінцевий строк</span>
+                  <strong>{formatDateTime(projectDeadline)}</strong>
+                </div>
 
                 {!isSelectedProjectReviewable ? (
-                  <p className="muted">
+                  <p className="message message-error field-wide">
                     Надання відгуків доступне лише протягом відкритого вікна оцінювання для обраного проєкту.
                   </p>
                 ) : null}
@@ -498,13 +570,13 @@ export default function ProjectReviewsPage() {
                 </label>
 
                 {subjectiveRemainingBudget != null ? (
-                  <p className="muted">
+                  <p className="inline-insight">
                     Доступний залишок суб&apos;єктивного ліміту для цієї категорії: {subjectiveRemainingBudget}
                   </p>
                 ) : null}
 
                 {editingReviewId ? (
-                  <p className="muted">
+                  <p className="inline-insight">
                     Режим редагування: змінювати категорію неможливо, однак дозволено скоригувати оцінку та коментар.
                   </p>
                 ) : null}
@@ -536,30 +608,31 @@ export default function ProjectReviewsPage() {
                 </div>
               </form>
 
-              {isContextLoading ? <p>Оновлення даних щодо відгуків...</p> : null}
-              {!targets.length ? <p className="muted">У вибраному проєкті немає інших учасників, яким можна надати відгук.</p> : null}
+              {isContextLoading ? <div className="empty-state">Оновлення даних щодо відгуків...</div> : null}
+              {!targets.length ? <div className="empty-state">У вибраному проєкті немає інших учасників, яким можна надати відгук.</div> : null}
               {targets.length > 0 && !canCreateNewReview && !authoredReviews.length ? (
-                <p className="muted">Для вибраного учасника наразі немає доступних категорій оцінювання.</p>
+                <div className="empty-state">Для вибраного учасника наразі немає доступних категорій оцінювання.</div>
               ) : null}
               {targets.length > 0 && !canCreateNewReview && authoredReviews.length ? (
-                <p className="muted">
+                <p className="inline-insight">
                   Усі доступні категорії вже використано, однак до завершення строку оцінювання Ви можете редагувати наявні
                   відгуки.
                 </p>
               ) : null}
 
               {targets.length > 0 ? (
-                <div className="list-stack">
+                <div className="list-stack authored-review-stack">
                   <h3 className="panel-title">Мої відгуки для вибраної пари учасників</h3>
                   {!authoredReviews.length ? (
-                    <p className="muted">Ви ще не надавали відгуків цьому учасникові в межах вибраного проєкту.</p>
+                    <div className="empty-state">Ви ще не надавали відгуків цьому учасникові в межах вибраного проєкту.</div>
                   ) : (
                     authoredReviews.map((review) => (
-                      <article key={review.reviewId} className="list-card">
-                        <h3>{formatCategoryLabel(review.categoryCode, review.categoryName)}</h3>
-                        <p>
-                          Коригування: <strong>{formatDelta(review.delta)}</strong> | створено {formatDateTime(review.createdAt)}
-                        </p>
+                      <article key={review.reviewId} className="list-card review-card">
+                        <div className="project-card-head">
+                          <h3>{formatCategoryLabel(review.categoryCode, review.categoryName)}</h3>
+                          <span className="category-pill">{formatDelta(review.delta)}</span>
+                        </div>
+                        <p className="muted">Створено {formatDateTime(review.createdAt)}</p>
                         <p>{review.comment || "Коментар відсутній."}</p>
                         <div className="toolbar">
                           <button
@@ -576,25 +649,33 @@ export default function ProjectReviewsPage() {
                   )}
                 </div>
               ) : null}
-            </>
-          )}
+              </>
+            )}
+          </section>
         </section>
       ) : null}
 
-      <section className="panel">
-        <h2 className="panel-title">Останні відгуки</h2>
-        {isLoading ? <p>Завантаження відгуків...</p> : null}
-        {!isLoading && !reviews.length ? <p className="muted">Відгуки наразі відсутні.</p> : null}
+      <section className="workspace-section" id="recent-reviews">
+        <div className="section-heading">
+          <div>
+            <p className="hero-kicker">Публічна активність</p>
+            <h2 className="panel-title">Останні відгуки</h2>
+          </div>
+        </div>
+        {isLoading ? <div className="empty-state">Завантаження відгуків...</div> : null}
+        {!isLoading && !reviews.length ? <div className="empty-state">Відгуки наразі відсутні.</div> : null}
 
-        <div className="list-stack">
+        <div className="request-card-grid">
           {reviews.map((review) => (
-            <article key={review.reviewId} className="list-card">
-              <h3>{review.projectTitle}</h3>
+            <article key={review.reviewId} className="list-card review-card">
+              <div className="project-card-head">
+                <h3>{review.projectTitle}</h3>
+                <span className="category-pill">{formatDelta(review.delta)}</span>
+              </div>
               <p>
                 <Link to={profileLink(review.authorCode)}>{review.authorCode}</Link> для{" "}
                 <Link to={profileLink(review.targetCode)}>{review.targetCode}</Link> |{" "}
-                <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span> | коригування{" "}
-                <strong>{formatDelta(review.delta)}</strong>
+                <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span>
               </p>
               <p>{review.comment || "Коментар відсутній."}</p>
               <p className="muted">{formatDateTime(review.createdAt)}</p>

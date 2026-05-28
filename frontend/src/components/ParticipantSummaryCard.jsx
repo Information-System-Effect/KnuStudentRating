@@ -11,7 +11,7 @@ export default function ParticipantSummaryCard({ participant }) {
     <section className="panel profile-summary-card">
       <div className="profile-head">
         <ParticipantAvatar fullName={participant.fullName} photoUrl={participant.photoUrl} />
-        <div>
+        <div className="profile-copy">
           <h2>
             {participant.fullName} <span className="mono">({participant.code})</span>
           </h2>
@@ -19,13 +19,13 @@ export default function ParticipantSummaryCard({ participant }) {
             {formatRoleLabel(participant.role)} | {participant.institution || "Інституція не вказана"} |{" "}
             {participant.groupName || "-"}
           </p>
-          <Link to={profileLink(participant.code)} className="inline-link">
+          <Link to={profileLink(participant.code)} className="button button-soft inline-action">
             Переглянути профіль
           </Link>
         </div>
       </div>
 
-      <p>{participant.about || "Короткий опис відсутній."}</p>
+      <p className="profile-about">{participant.about || "Короткий опис відсутній."}</p>
 
       <div className="stats-grid compact">
         <article className="stat-card">

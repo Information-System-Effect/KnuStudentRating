@@ -7,6 +7,10 @@ function createProjectRequestForm() {
   return { title: "", description: "" };
 }
 
+function requestStatusClass(status) {
+  return `status-pill status-pill-${String(status || "").toLowerCase().replace(/_/g, "-")}`;
+}
+
 export default function ProjectRequestsPage() {
   const { api, authApi, hasRole, isAuthenticated } = useAuth();
   const [publicRequests, setPublicRequests] = useState([]);
@@ -136,78 +140,144 @@ export default function ProjectRequestsPage() {
   }
 
   return (
-    <div className="page-stack">
-      <section className="hero hero-short">
-        <p className="hero-kicker">Заявки</p>
-        <h1 className="hero-title">Заявки на нові проєкти</h1>
+    <div className="page-stack requests-page">
+      <section className="page-hero">
+        <div>
+          <p className="hero-kicker">Подання проєктів</p>
+          <h1 className="hero-title">Заявки на нові проєкти</h1>
+          <p className="hero-text">Прозорий pipeline для ідей, модерації та запуску командних проєктів.</p>
+        </div>
+        <div className="hero-actions">
+          {canCreateRequests ? (
+            <a href="#create-request" className="button button-primary">
+              Подати заявку
+            </a>
+          ) : null}
+          {isAdmin ? (
+            <a href="#moderation" className="button button-soft">
+              Модерація
+            </a>
+          ) : null}
+        </div>
       </section>
 
       {message ? <div className="message message-success">{message}</div> : null}
-      {error ? <div className="message message-error">{error}</div> : null}
+      {error ? (
+        <section className="home-error-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true" />
+          <div>
+            <h2>Не вдалося завантажити дані</h2>
+            <p>Спробуйте оновити сторінку або повторити запит пізніше.</p>
+            <span className="alert-details">{error}</span>
+          </div>
+          <button type="button" className="button button-soft" onClick={loadData}>
+            Спробувати ще раз
+          </button>
+        </section>
+      ) : null}
 
-      <section className="panel">
-        <h2 className="panel-title">Публічна стрічка</h2>
-        {isLoading ? <p>Завантаження заявок...</p> : null}
-        {!isLoading && !publicRequests.length ? <p className="muted">Заявки наразі відсутні.</p> : null}
+      <section className="stats-grid">
+        <article className="stat-card">
+          <span className="stat-label">Публічні заявки</span>
+          <strong className="stat-value">{publicRequests.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span className="stat-label">Мої заявки</span>
+          <strong className="stat-value">{myRequests.length}</strong>
+        </article>
+        <article className="stat-card">
+          <span className="stat-label">Для модерації</span>
+          <strong className="stat-value">{adminRequests.length}</strong>
+        </article>
+      </section>
 
-        <div className="list-stack">
+      {canCreateRequests ? (
+        <section className="request-workbench" id="create-request">
+          <article className="panel request-form-card">
+            <p className="hero-kicker">Нова заявка</p>
+            <h2 className="panel-title">Подати заявку</h2>
+            <form onSubmit={handleCreate} className="form-grid">
+              <label className="field">
+                <span>Назва</span>
+                <input type="text" name="title" value={form.title} onChange={updateForm} required maxLength={255} />
+              </label>
+              <label className="field">
+                <span>Опис</span>
+                <textarea name="description" rows={5} value={form.description} onChange={updateForm} maxLength={4000} />
+              </label>
+              <button type="submit" className="button button-primary">
+                Надіслати заявку
+              </button>
+            </form>
+          </article>
+
+          <article className="panel">
+            <div className="section-heading">
+              <div>
+                <p className="hero-kicker">Мої заявки</p>
+                <h2 className="panel-title">Мої заявки</h2>
+              </div>
+            </div>
+            {!myRequests.length ? <div className="empty-state">Наразі у Вас ще немає заявок.</div> : null}
+            <div className="list-stack">
+              {myRequests.map((request) => (
+                <article key={request.id} className="list-card request-card">
+                  <div className="project-card-head">
+                    <h3>{request.title}</h3>
+                    <span className={requestStatusClass(request.status)}>{formatRequestStatus(request.status)}</span>
+                  </div>
+                  <p>{request.description || "Без опису."}</p>
+                  <div className="meta-grid">
+                    <span>Створено <strong>{formatDateTime(request.createdAt)}</strong></span>
+                    <span>Розглянуто <strong>{formatDateTime(request.reviewedAt)}</strong></span>
+                    {request.createdProjectId ? (
+                      <span>Проєкт <strong>#{request.createdProjectId}</strong></span>
+                    ) : null}
+                  </div>
+                  {request.adminComment ? <p className="muted">Коментар адміністратора: {request.adminComment}</p> : null}
+                </article>
+              ))}
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      <section className="workspace-section">
+        <div className="section-heading">
+          <div>
+            <p className="hero-kicker">Публічна стрічка</p>
+            <h2 className="panel-title">Публічна стрічка</h2>
+          </div>
+        </div>
+        {isLoading ? <div className="empty-state">Завантаження заявок...</div> : null}
+        {!isLoading && !publicRequests.length ? <div className="empty-state">Заявки наразі відсутні.</div> : null}
+
+        <div className="request-card-grid">
           {publicRequests.map((request) => (
-            <article key={request.requestId} className="list-card">
-              <h3>{request.title}</h3>
+            <article key={request.requestId} className="list-card request-card">
+              <div className="project-card-head">
+                <h3>{request.title}</h3>
+                <span className={requestStatusClass(request.status)}>{formatRequestStatus(request.status)}</span>
+              </div>
               <p>{request.description || "Без опису."}</p>
-              <p className="muted">
-                Статус: {formatRequestStatus(request.status)} | Автор (ID): {request.authorUserId} | Створено:{" "}
-                {formatDateTime(request.createdAt)}
-              </p>
+              <div className="meta-grid">
+                <span>Автор ID <strong>{request.authorUserId}</strong></span>
+                <span>Створено <strong>{formatDateTime(request.createdAt)}</strong></span>
+              </div>
             </article>
           ))}
         </div>
       </section>
 
-      {canCreateRequests ? (
-        <section className="panel">
-          <h2 className="panel-title">Подати заявку</h2>
-          <form onSubmit={handleCreate} className="form-grid">
-            <label className="field">
-              <span>Назва</span>
-              <input type="text" name="title" value={form.title} onChange={updateForm} required maxLength={255} />
-            </label>
-            <label className="field">
-              <span>Опис</span>
-              <textarea name="description" rows={3} value={form.description} onChange={updateForm} maxLength={4000} />
-            </label>
-            <button type="submit" className="button button-primary">
-              Надіслати заявку
-            </button>
-          </form>
-
-          <h3 className="panel-title">Мої заявки</h3>
-          {!myRequests.length ? <p className="muted">Наразі у Вас ще немає заявок.</p> : null}
-          <div className="list-stack">
-            {myRequests.map((request) => (
-              <article key={request.id} className="list-card">
-                <h3>{request.title}</h3>
-                <p>{request.description || "Без опису."}</p>
-                <p className="muted">
-                  {formatRequestStatus(request.status)} | Створено: {formatDateTime(request.createdAt)} | Розглянуто:{" "}
-                  {formatDateTime(request.reviewedAt)}
-                </p>
-                {request.adminComment ? <p className="muted">Коментар адміністратора: {request.adminComment}</p> : null}
-                {request.createdProjectId ? (
-                  <p className="muted">
-                    Проєкт створено: <span className="mono">#{request.createdProjectId}</span>
-                  </p>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {isAdmin ? (
-        <section className="panel">
-          <h2 className="panel-title">Модерація</h2>
-          {!adminRequests.length ? <p className="muted">Немає заявок для модерації.</p> : null}
+        <section className="panel" id="moderation">
+          <div className="section-heading">
+            <div>
+              <p className="hero-kicker">Черга модерації</p>
+              <h2 className="panel-title">Модерація</h2>
+            </div>
+          </div>
+          {!adminRequests.length ? <div className="empty-state">Немає заявок для модерації.</div> : null}
 
           <div className="list-stack">
             {adminRequests.map((request) => {
@@ -215,19 +285,20 @@ export default function ProjectRequestsPage() {
               const canCreateMissingProject = request.status === "APPROVED" && !request.createdProjectId;
               const isCreating = creatingProjectRequestId === request.id;
               return (
-                <article key={request.id} className="list-card">
-                  <h3>{request.title}</h3>
+                <article key={request.id} className="list-card moderation-card">
+                  <div className="project-card-head">
+                    <h3>{request.title}</h3>
+                    <span className={requestStatusClass(request.status)}>{formatRequestStatus(request.status)}</span>
+                  </div>
                   <p>{request.description || "Без опису."}</p>
-                  <p className="muted">
-                    Статус: {formatRequestStatus(request.status)} | Автор (ID): {request.authorUserId} | Створено:{" "}
-                    {formatDateTime(request.createdAt)}
-                  </p>
+                  <div className="meta-grid">
+                    <span>Автор ID <strong>{request.authorUserId}</strong></span>
+                    <span>Створено <strong>{formatDateTime(request.createdAt)}</strong></span>
+                    {request.createdProjectId ? (
+                      <span>Проєкт <strong>#{request.createdProjectId}</strong></span>
+                    ) : null}
+                  </div>
 
-                  {request.createdProjectId ? (
-                    <p className="muted">
-                      Проєкт створено автоматично: <span className="mono">#{request.createdProjectId}</span>
-                    </p>
-                  ) : null}
                   {request.adminComment ? <p className="muted">Чинний коментар адміністратора: {request.adminComment}</p> : null}
 
                   <label className="field">

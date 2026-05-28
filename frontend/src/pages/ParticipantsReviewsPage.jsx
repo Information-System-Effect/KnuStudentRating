@@ -69,18 +69,41 @@ export default function ParticipantsReviewsPage({ audience }) {
 
   return (
     <div className="page-stack">
-      <section className="hero hero-short">
-        <p className="hero-kicker">Відгуки</p>
-        <h1 className="hero-title">{title}</h1>
+      <section className="page-hero">
+        <div>
+          <p className="hero-kicker">Каталог відгуків</p>
+          <h1 className="hero-title">{title}</h1>
+          <p className="hero-text">Оберіть учасника, перегляньте контекст відгуків, категорії та останню активність.</p>
+        </div>
+        <div className="hero-actions">
+          {selectedCode ? (
+            <Link to={profileLink(selectedCode)} className="button button-primary">
+              Переглянути профіль
+            </Link>
+          ) : null}
+        </div>
       </section>
 
-      {error ? <div className="message message-error">{error}</div> : null}
+      {error ? (
+        <section className="home-error-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true" />
+          <div>
+            <h2>Не вдалося завантажити дані</h2>
+            <p>Спробуйте оновити сторінку або повторити запит пізніше.</p>
+            <span className="alert-details">{error}</span>
+          </div>
+          <button type="button" className="button button-soft" onClick={loadParticipants}>
+            Спробувати ще раз
+          </button>
+        </section>
+      ) : null}
 
       <div className="split-layout">
-        <aside className="panel side-panel">
+        <aside className="panel side-panel directory-rail">
+          <p className="hero-kicker">Учасники</p>
           <h2 className="panel-title">Учасники</h2>
-          {isLoading ? <p>Завантаження списку...</p> : null}
-          {!isLoading && !participants.length ? <p className="muted">Учасників не знайдено.</p> : null}
+          {isLoading ? <div className="empty-state">Завантаження списку...</div> : null}
+          {!isLoading && !participants.length ? <div className="empty-state">Учасників не знайдено.</div> : null}
 
           <div className="button-list">
             {participants.map((participant) => (
@@ -97,21 +120,26 @@ export default function ParticipantsReviewsPage({ audience }) {
           </div>
         </aside>
 
-        <section className="panel">
-          <h2 className="panel-title">Відгуки</h2>
-          {!reviews.length ? <p className="muted">Немає відгуків для обраного учасника.</p> : null}
+        <section className="workspace-section">
+          <div className="section-heading">
+            <div>
+              <p className="hero-kicker">Стрічка активності</p>
+              <h2 className="panel-title">Відгуки</h2>
+            </div>
+          </div>
+          {!reviews.length ? <div className="empty-state">Немає відгуків для обраного учасника.</div> : null}
 
-          <div className="list-stack">
+          <div className="request-card-grid">
             {reviews.map((review) => (
-              <article key={review.reviewId} className="list-card">
-                <h3>{review.projectTitle}</h3>
+              <article key={review.reviewId} className="list-card review-card">
+                <div className="project-card-head">
+                  <h3>{review.projectTitle}</h3>
+                  <span className="category-pill">{formatDelta(review.delta)}</span>
+                </div>
                 <p>
                   <Link to={profileLink(review.authorCode)}>{review.authorCode}</Link> до{" "}
                   <Link to={profileLink(review.targetCode)}>{review.targetCode}</Link> |{" "}
                   <span className="category-pill">{formatCategoryLabel(review.categoryCode)}</span>
-                </p>
-                <p>
-                  Коригування: <strong>{formatDelta(review.delta)}</strong>
                 </p>
                 <p>{review.comment || "Коментар відсутній."}</p>
                 <p className="muted">{formatDateTime(review.createdAt)}</p>

@@ -53,52 +53,65 @@ export default function RegisterPage() {
   }
 
   return (
-    <section className="auth-panel">
-      <h1 className="panel-title">Реєстрація</h1>
-      <p className="muted">Створіть обліковий запис для участі в проєктах і системі взаємооцінювання.</p>
+    <section className="auth-layout auth-layout-wide">
+      <aside className="auth-promo">
+        <p className="hero-kicker">Реєстрація студента</p>
+        <h1>Створіть профіль, який працює як академічне портфоліо</h1>
+        <p>Після реєстрації можна брати участь у проєктах, подавати заявки та формувати репутаційний рейтинг.</p>
+        <div className="auth-promo-grid">
+          <span>Профіль навичок</span>
+          <span>Історія проєктів</span>
+          <span>Взаємні відгуки</span>
+        </div>
+      </aside>
 
-      <form onSubmit={handleSubmit} className="form-grid">
-        <label className="field">
-          <span>Електронна пошта</span>
-          <input type="email" name="email" value={form.email} onChange={updateField} required />
-        </label>
+      <div className="auth-panel">
+        <h1 className="panel-title">Реєстрація</h1>
+        <p className="muted">Створіть обліковий запис для участі в проєктах і системі взаємооцінювання.</p>
 
-        <label className="field">
-          <span>Пароль</span>
-          <input type="password" name="password" value={form.password} onChange={updateField} required minLength={8} />
-        </label>
+        <form onSubmit={handleSubmit} className="form-grid two-col">
+          <label className="field">
+            <span>Електронна пошта</span>
+            <input type="email" name="email" value={form.email} onChange={updateField} required />
+          </label>
 
-        <label className="field">
-          <span>ПІБ</span>
-          <input type="text" name="fullName" value={form.fullName} onChange={updateField} required />
-        </label>
+          <label className="field">
+            <span>Пароль</span>
+            <input type="password" name="password" value={form.password} onChange={updateField} required minLength={8} />
+          </label>
 
-        <label className="field">
-          <span>Інституція</span>
-          <input type="text" name="institution" value={form.institution} onChange={updateField} />
-        </label>
+          <label className="field">
+            <span>ПІБ</span>
+            <input type="text" name="fullName" value={form.fullName} onChange={updateField} required />
+          </label>
 
-        <label className="field">
-          <span>Група/кафедра</span>
-          <input type="text" name="groupName" value={form.groupName} onChange={updateField} />
-        </label>
+          <label className="field">
+            <span>Інституція</span>
+            <input type="text" name="institution" value={form.institution} onChange={updateField} />
+          </label>
 
-        <label className="field">
-          <span>Відомості про себе</span>
-          <textarea name="about" rows={4} value={form.about} onChange={updateField} />
-        </label>
+          <label className="field">
+            <span>Група/кафедра</span>
+            <input type="text" name="groupName" value={form.groupName} onChange={updateField} />
+          </label>
 
-        <button type="submit" className="button button-primary" disabled={isSubmitting}>
-          {isSubmitting ? "Реєстрація..." : "Створити обліковий запис"}
-        </button>
-      </form>
+          <label className="field field-wide">
+            <span>Відомості про себе</span>
+            <textarea name="about" rows={4} value={form.about} onChange={updateField} />
+          </label>
 
-      {message ? <div className="message message-success">{message}</div> : null}
-      {error ? <div className="message message-error">{error}</div> : null}
+          <button type="submit" className="button button-primary field-wide" disabled={isSubmitting}>
+            {isSubmitting ? "Реєстрація..." : "Створити обліковий запис"}
+          </button>
+        </form>
 
-      <p className="muted">
-        Уже маєте обліковий запис? <Link to="/site/auth/login">Перейти до входу</Link>.
-      </p>
+        {message ? <div className="message message-success">{message}</div> : null}
+        {error ? <div className="message message-error">{error}</div> : null}
+
+        <p className="muted">
+          Уже маєте обліковий запис? <Link to="/site/auth/login">Перейти до входу</Link>.
+        </p>
+      </div>
     </section>
   );
 }

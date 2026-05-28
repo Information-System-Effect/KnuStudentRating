@@ -42,46 +42,61 @@ export default function LoginPage() {
   }
 
   return (
-    <section className="auth-panel">
-      <h1 className="panel-title">Вхід</h1>
-      <p className="muted">Увійдіть до облікового запису, щоб керувати профілем, заявками та процесами модерації.</p>
+    <section className="auth-layout">
+      <aside className="auth-promo">
+        <p className="hero-kicker">Безпечний доступ</p>
+        <h1>Поверніться до свого академічного простору</h1>
+        <p>
+          Профіль, заявки, оцінювання та адміністративні дії зібрані в одному сучасному інтерфейсі.
+        </p>
+        <div className="auth-promo-grid">
+          <span>Відгуки за проєктами</span>
+          <span>Доступ за ролями</span>
+          <span>Аналітика рейтингу</span>
+        </div>
+      </aside>
 
-      <form onSubmit={handleSubmit} className="form-grid">
-        <label className="field">
-          <span>Електронна пошта</span>
-          <input
-            type="email"
-            name="email"
-            value={form.email}
-            onChange={updateField}
-            autoComplete="email"
-            required
-          />
-        </label>
+      <div className="auth-panel">
+        <h1 className="panel-title">Вхід</h1>
+        <p className="muted">Увійдіть до облікового запису, щоб керувати профілем, заявками та процесами модерації.</p>
 
-        <label className="field">
-          <span>Пароль</span>
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={updateField}
-            autoComplete="current-password"
-            required
-          />
-        </label>
+        <form onSubmit={handleSubmit} className="form-grid">
+          <label className="field">
+            <span>Електронна пошта</span>
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={updateField}
+              autoComplete="email"
+              required
+            />
+          </label>
 
-        <button type="submit" className="button button-primary" disabled={isSubmitting}>
-          {isSubmitting ? "Вхід..." : "Увійти"}
-        </button>
-      </form>
+          <label className="field">
+            <span>Пароль</span>
+            <input
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={updateField}
+              autoComplete="current-password"
+              required
+            />
+          </label>
 
-      {message ? <div className="message message-success">{message}</div> : null}
-      {error ? <div className="message message-error">{error}</div> : null}
+          <button type="submit" className="button button-primary" disabled={isSubmitting}>
+            {isSubmitting ? "Вхід..." : "Увійти"}
+          </button>
+        </form>
 
-      <p className="muted">
-        Ще не маєте облікового запису? <Link to="/site/auth/register">Зареєструватися</Link>.
-      </p>
+        {message ? <div className="message message-success">{message}</div> : null}
+        {error ? <div className="message message-error">{error}</div> : null}
+
+        <p className="muted">
+          Ще не маєте облікового запису? <Link to="/site/auth/register">Зареєструватися</Link>.
+        </p>
+      </div>
     </section>
   );
 }

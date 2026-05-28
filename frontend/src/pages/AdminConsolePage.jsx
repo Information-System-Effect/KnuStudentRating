@@ -647,19 +647,44 @@ export default function AdminConsolePage() {
   }
 
   return (
-    <div className="page-stack">
-      <section className="hero hero-short">
-        <p className="hero-kicker">Адміністрування</p>
-        <h1 className="hero-title">Панель адміністрування платформи</h1>
-        <p className="hero-text">
-          Єдиний центр керування заявками, життєвим циклом проєктів, учасниками та ролями користувачів.
-        </p>
+    <div className="page-stack admin-console-page">
+      <section className="page-hero">
+        <div>
+          <p className="hero-kicker">Центр керування</p>
+          <h1 className="hero-title">Панель адміністрування платформи</h1>
+          <p className="hero-text">
+            Єдиний центр керування заявками, життєвим циклом проєктів, учасниками та ролями користувачів.
+          </p>
+        </div>
+        <div className="hero-actions">
+          <a href="#admin-requests" className="button button-primary">
+            Заявки
+          </a>
+          <a href="#admin-projects" className="button button-soft">
+            Проєкти
+          </a>
+          <a href="#admin-users" className="button button-soft">
+            Користувачі
+          </a>
+        </div>
       </section>
 
       {message ? <div className="message message-success">{message}</div> : null}
-      {error ? <div className="message message-error">{error}</div> : null}
+      {error ? (
+        <section className="home-error-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true" />
+          <div>
+            <h2>Не вдалося завантажити дані</h2>
+            <p>Спробуйте оновити сторінку або повторити запит пізніше.</p>
+            <span className="alert-details">{error}</span>
+          </div>
+          <button type="button" className="button button-soft" onClick={loadAdminData}>
+            Спробувати ще раз
+          </button>
+        </section>
+      ) : null}
 
-      {isLoading ? <section className="panel">Завантаження даних панелі адміністрування...</section> : null}
+      {isLoading ? <section className="empty-state">Завантаження даних панелі адміністрування...</section> : null}
 
       <section className="admin-kpi-grid">
         <article className="panel admin-kpi-card">
@@ -688,9 +713,12 @@ export default function AdminConsolePage() {
         </article>
       </section>
 
-      <section className="panel">
+      <section className="panel admin-board" id="admin-requests">
         <div className="admin-section-head">
-          <h2 className="panel-title">Модерація заявок</h2>
+          <div>
+            <p className="hero-kicker">Черга розгляду</p>
+            <h2 className="panel-title">Модерація заявок</h2>
+          </div>
           <input
             type="search"
             className="admin-filter"
@@ -700,7 +728,7 @@ export default function AdminConsolePage() {
           />
         </div>
 
-        {!filteredRequests.length ? <p className="muted">Заявок за фільтром не знайдено.</p> : null}
+        {!filteredRequests.length ? <div className="empty-state">Заявок за фільтром не знайдено.</div> : null}
         <div className="list-stack">
           {filteredRequests.map((request) => {
             const isModerating = moderatingRequestId === request.id;
@@ -710,7 +738,7 @@ export default function AdminConsolePage() {
             const canCreateMissingProject = request.status === "APPROVED" && !request.createdProjectId;
 
             return (
-              <article key={request.id} className="list-card">
+              <article key={request.id} className="list-card admin-work-card">
                 <div className="admin-row-head">
                   <h3>
                     {request.title} <span className="mono">#{request.id}</span>
@@ -719,10 +747,11 @@ export default function AdminConsolePage() {
                 </div>
 
                 <p>{request.description || "Без опису."}</p>
-                <p className="muted">
-                  Автор (ID): {request.authorUserId} | Створено: {formatDateTime(request.createdAt)} | Розглянуто:{" "}
-                  {formatDateTime(request.reviewedAt)}
-                </p>
+                <div className="meta-grid">
+                  <span>Автор ID <strong>{request.authorUserId}</strong></span>
+                  <span>Створено <strong>{formatDateTime(request.createdAt)}</strong></span>
+                  <span>Розглянуто <strong>{formatDateTime(request.reviewedAt)}</strong></span>
+                </div>
 
                 {request.createdProjectId ? (
                   <p className="muted">
@@ -787,9 +816,12 @@ export default function AdminConsolePage() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel admin-board" id="admin-projects">
         <div className="admin-section-head">
-          <h2 className="panel-title">Керування проєктами</h2>
+          <div>
+            <p className="hero-kicker">Керування проєктами</p>
+            <h2 className="panel-title">Керування проєктами</h2>
+          </div>
           <input
             type="search"
             className="admin-filter"
@@ -925,7 +957,7 @@ export default function AdminConsolePage() {
           </form>
         </section>
 
-        {!filteredProjects.length ? <p className="muted">Проєктів за фільтром не знайдено.</p> : null}
+        {!filteredProjects.length ? <div className="empty-state">Проєктів за фільтром не знайдено.</div> : null}
 
         <div className="list-stack">
           {filteredProjects.map((project) => {
@@ -938,7 +970,7 @@ export default function AdminConsolePage() {
             const isCompleted = project.status === "COMPLETED";
 
             return (
-              <article key={project.id} className="list-card">
+              <article key={project.id} className="list-card admin-work-card">
                 <div className="admin-row-head">
                   <h3>
                     {project.title} <span className="mono">#{project.id}</span>
@@ -947,10 +979,11 @@ export default function AdminConsolePage() {
                 </div>
 
                 <p>{project.description || "Без опису."}</p>
-                <p className="muted">
-                  Початок: {formatDateTime(project.startAt)} | Завершення: {formatDateTime(project.endAt)} | Оцінювання до:{" "}
-                  {formatDateTime(project.feedbackDeadlineAt)}
-                </p>
+                <div className="meta-grid">
+                  <span>Початок <strong>{formatDateTime(project.startAt)}</strong></span>
+                  <span>Завершення <strong>{formatDateTime(project.endAt)}</strong></span>
+                  <span>Оцінювання до <strong>{formatDateTime(project.feedbackDeadlineAt)}</strong></span>
+                </div>
 
                 <form className="form-grid three-col" onSubmit={(event) => submitLifecycle(project, event)}>
                   <label className="field">
@@ -1087,9 +1120,12 @@ export default function AdminConsolePage() {
         </div>
       </section>
 
-      <section className="panel">
+      <section className="panel admin-board" id="admin-users">
         <div className="admin-section-head">
-          <h2 className="panel-title">Користувачі та ролі</h2>
+          <div>
+            <p className="hero-kicker">Користувачі та доступ</p>
+            <h2 className="panel-title">Користувачі та ролі</h2>
+          </div>
           <input
             type="search"
             className="admin-filter"
@@ -1102,13 +1138,13 @@ export default function AdminConsolePage() {
         <div className="admin-split-grid">
           <section className="panel panel-alt">
             <h3 className="panel-title">Ролі користувачів</h3>
-            {!filteredUsers.length ? <p className="muted">Користувачів за фільтром не знайдено.</p> : null}
+            {!filteredUsers.length ? <div className="empty-state">Користувачів за фільтром не знайдено.</div> : null}
 
             <div className="list-stack">
               {filteredUsers.map((user) => {
                 const savingRole = savingRoleUserId === user.userId;
                 return (
-                  <article key={user.userId} className="list-card">
+                  <article key={user.userId} className="list-card admin-work-card">
                     <h4>
                       {user.fullName} <span className="mono">({user.code})</span>
                     </h4>

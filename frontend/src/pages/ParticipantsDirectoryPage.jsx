@@ -13,10 +13,11 @@ function buildScoreChart(categoryScores) {
         label: "Оцінка",
         data: categoryScores.map((item) => Number(item.score)),
         backgroundColor: categoryScores.map((item) =>
-          item.verified ? "rgba(36, 126, 103, 0.78)" : "rgba(217, 147, 58, 0.76)",
+          item.verified ? "rgba(37, 99, 235, 0.82)" : "rgba(245, 158, 11, 0.72)",
         ),
-        borderColor: "rgba(21, 45, 37, 0.48)",
+        borderColor: "rgba(15, 23, 42, 0.14)",
         borderWidth: 1,
+        borderRadius: 10,
       },
     ],
   };
@@ -28,7 +29,8 @@ function buildVerificationChart(rating) {
     datasets: [
       {
         data: [rating.verifiedCategories, rating.unverifiedCategories],
-        backgroundColor: ["rgba(36, 126, 103, 0.8)", "rgba(218, 154, 73, 0.78)"],
+        backgroundColor: ["rgba(37, 99, 235, 0.86)", "rgba(6, 182, 212, 0.72)"],
+        borderWidth: 0,
       },
     ],
   };
@@ -121,18 +123,42 @@ export default function ParticipantsDirectoryPage({ audience }) {
 
   return (
     <div className="page-stack">
-      <section className="hero hero-short">
-        <p className="hero-kicker">Рейтинг</p>
-        <h1 className="hero-title">{title}</h1>
+      <section className="page-hero">
+        <div>
+          <p className="hero-kicker">Каталог учасників</p>
+          <h1 className="hero-title">{title}</h1>
+          <p className="hero-text">Порівнюйте профілі, категорійні бали, графіки верифікації та останні відгуки.</p>
+        </div>
+        <div className="hero-actions">
+          <Link
+            to={audience === "students" ? "/site/participants/students/reviews" : "/site/participants/teachers/reviews"}
+            className="button button-primary"
+          >
+            Відгуки аудиторії
+          </Link>
+        </div>
       </section>
 
-      {error ? <div className="message message-error">{error}</div> : null}
+      {error ? (
+        <section className="home-error-alert" role="alert">
+          <span className="alert-icon" aria-hidden="true" />
+          <div>
+            <h2>Не вдалося завантажити дані</h2>
+            <p>Спробуйте оновити сторінку або повторити запит пізніше.</p>
+            <span className="alert-details">{error}</span>
+          </div>
+          <button type="button" className="button button-soft" onClick={loadParticipants}>
+            Спробувати ще раз
+          </button>
+        </section>
+      ) : null}
 
       <div className="split-layout">
-        <aside className="panel side-panel">
+        <aside className="panel side-panel directory-rail">
+          <p className="hero-kicker">Учасники</p>
           <h2 className="panel-title">Учасники</h2>
-          {isLoading ? <p>Завантаження списку...</p> : null}
-          {!isLoading && !participants.length ? <p className="muted">Учасників не знайдено.</p> : null}
+          {isLoading ? <div className="empty-state">Завантаження списку...</div> : null}
+          {!isLoading && !participants.length ? <div className="empty-state">Учасників не знайдено.</div> : null}
 
           <div className="button-list">
             {participants.map((participant) => (
@@ -154,7 +180,12 @@ export default function ParticipantsDirectoryPage({ audience }) {
 
           {rating ? (
             <section className="panel">
-              <h3 className="panel-title">Категорійні бали</h3>
+              <div className="section-heading">
+                <div>
+                  <p className="hero-kicker">Матриця навичок</p>
+                  <h3 className="panel-title">Категорійні бали</h3>
+                </div>
+              </div>
               {!rating.categoryScores?.length ? <p className="muted">Категорійні бали ще не задані.</p> : null}
 
               {rating.categoryScores?.length ? (
@@ -216,8 +247,13 @@ export default function ParticipantsDirectoryPage({ audience }) {
             </div>
           ) : null}
 
-          <section className="panel">
-            <h3 className="panel-title">Останні відгуки</h3>
+          <section className="workspace-section">
+            <div className="section-heading">
+              <div>
+                <p className="hero-kicker">Остання активність</p>
+                <h3 className="panel-title">Останні відгуки</h3>
+              </div>
+            </div>
             {!reviews.length ? <p className="muted">Відгуків не знайдено.</p> : null}
 
             <div className="list-stack">

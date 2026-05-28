@@ -6,7 +6,7 @@ export default function RequireAuth({ children }) {
   const location = useLocation();
 
   if (isBootstrapping) {
-    return <div className="panel">Завантаження сесії...</div>;
+    return <div className="empty-state">Завантаження сесії...</div>;
   }
 
   if (!isAuthenticated) {
