@@ -4,26 +4,13 @@
  * Призначення:
  * - перевіряти загальну структуру внутрішнього текстового протоколу;
  * - відокремлювати базову перевірку формату від шаблонної бізнес-валідації;
- * - повертати список знайдених помилок без виконання маршрутизації чи перевірки прав доступу.
- *
- * Цей валідатор перевіряє лише спільні правила протоколу:
- * - senderCode
- * - targetUserCode
- * - method
- * - targetField
- * - opParams
- * - changeValue
+ * - повертати список знайдених помилок формату без виконання маршрутизації чи перевірки прав доступу.
  */
 
 const { ALLOWED_OPERATIONS } = require("../utils/constants");
 
 /**
- * Перевіряє коректність коду користувача.
- *
- * Дозволяються:
- * - латинські літери
- * - цифри
- * - символи "_" і "-"
+ * Перевіряє коректність коду користувача (відправника або цілі).
  *
  * @param {string} value - Значення senderCode або targetUserCode.
  * @returns {boolean} true, якщо код відповідає допустимому формату.
@@ -35,11 +22,6 @@ function isValidUserCode(value) {
 /**
  * Перевіряє коректність імені цільового поля.
  *
- * Дозволяються:
- * - великі та малі латинські літери
- * - цифри
- * - символ "_"
- *
  * @param {string} value - Назва targetField.
  * @returns {boolean} true, якщо поле має допустимий формат.
  */
@@ -48,14 +30,12 @@ function isValidTargetField(value) {
 }
 
 /**
- * Перевіряє коректність значення зміни для PUT/PATCH.
- *
- * Вимоги:
- * - лише ціле число зі знаком або без;
- * - значення має бути в межах від -20 до 20.
+ * Перевіряє базовий формат значення зміни для PUT/PATCH.
+ * Це лише базова перевірка протоколу (числа від -20 до 20).
+ * Жорсткі рольові ліміти перевірятимуться в access-control.service.
  *
  * @param {string} value - Значення changeValue.
- * @returns {boolean} true, якщо значення зміни коректне.
+ * @returns {boolean} true, якщо значення зміни є коректним числом.
  */
 function isValidChangeValue(value) {
   const trimmed = (value || "").trim();
@@ -71,40 +51,17 @@ function isValidChangeValue(value) {
 /**
  * Перевіряє формат параметрів запиту для GET/DELETE.
  *
- * Підтримуваний формат:
- * key=value;key=value
- *
- * Порожній рядок також вважається допустимим.
- *
  * @param {string} value - Рядок параметрів opParams.
  * @returns {boolean} true, якщо формат параметрів коректний.
  */
 function isValidQueryParams(value) {
   const trimmed = (value || "").trim();
-
-  if (trimmed === "") {
-    return true;
-  }
-
+  if (trimmed === "") return true;
   return /^([a-zA-Z0-9_]+=[^;#]*)(;[a-zA-Z0-9_]+=[^;#]*)*$/.test(trimmed);
 }
 
 /**
  * Виконує базову валідацію розпарсеного gateway-повідомлення.
- *
- * На цьому рівні перевіряються лише загальні правила структури протоколу,
- * незалежно від конкретного шаблону запиту.
- *
- * Перевіряються:
- * - senderCode
- * - targetUserCode (якщо він не дорівнює "_")
- * - method
- * - для GET/DELETE:
- *   - targetField
- *   - opParams
- * - для PUT/PATCH:
- *   - targetField у кожній зміні
- *   - changeValue у кожній зміні
  *
  * @param {object} parsed - Розпарсений об'єкт gateway-запиту.
  * @returns {{ok: boolean, errors: string[]}} Результат базової валідації.
@@ -113,69 +70,38 @@ function validateBaseMessage(parsed) {
   const errors = [];
   const hasTargetUser = parsed.targetUserCode !== "_";
 
-  /**
-   * Перевірка senderCode.
-   */
   if (!isValidUserCode(parsed.senderCode)) {
-    errors.push("Невірний senderCode");
+    errors.push("Невірний формат senderCode");
   }
 
-  /**
-   * Перевірка targetUserCode виконується лише тоді,
-   * коли запит справді містить цільового користувача.
-   */
   if (hasTargetUser && !isValidUserCode(parsed.targetUserCode)) {
-    errors.push("Невірний targetUserCode");
+    errors.push("Невірний формат targetUserCode");
   }
 
-  /**
-   * Перевірка допустимості методу запиту.
-   */
   if (!ALLOWED_OPERATIONS.includes(parsed.method)) {
-    errors.push("Невірна операція");
+    errors.push(`Невідомий або недопустимий метод: ${parsed.method}`);
   }
 
-  /**
-   * Перевірка структури GET / DELETE запитів.
-   *
-   * Для цих методів перевіряються:
-   * - targetField
-   * - opParams
-   */
   if (parsed.method === "GET" || parsed.method === "DELETE") {
     if (!isValidTargetField(parsed.targetField)) {
-      errors.push("Невірний TARGET_FIELD");
+      errors.push(`Невірний формат TARGET_FIELD: ${parsed.targetField}`);
     }
-
     if (!isValidQueryParams(parsed.opParams)) {
-      errors.push("Невірний формат параметрів запиту");
+      errors.push("Невірний формат параметрів запиту (очікується key=value)");
     }
   }
 
-  /**
-   * Перевірка структури PUT / PATCH запитів.
-   *
-   * Для кожної зміни перевіряються:
-   * - targetField
-   * - changeValue
-   */
   if (parsed.method === "PUT" || parsed.method === "PATCH") {
     for (const change of parsed.changes || []) {
       if (!isValidTargetField(change.targetField)) {
-        errors.push(`Невірний TARGET_FIELD: ${change.targetField}`);
+        errors.push(`Невірний формат TARGET_FIELD: ${change.targetField}`);
       }
-
       if (!isValidChangeValue(change.changeValue)) {
-        errors.push(`Невірний формат зміни: ${change.changeValue}`);
+        errors.push(`Невірний формат зміни (очікується число в межах базового протоколу): ${change.changeValue}`);
       }
     }
   }
 
-  /**
-   * Повертається результат валідації:
-   * - ok = true, якщо помилок не знайдено;
-   * - ok = false, якщо знайдено хоча б одну помилку.
-   */
   return {
     ok: errors.length === 0,
     errors,
