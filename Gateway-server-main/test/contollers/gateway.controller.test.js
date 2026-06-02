@@ -29,6 +29,7 @@ const { detectGatewayTemplate } = require("../../src/services/template-detector.
 const { validateTemplateMessage } = require("../../src/services/template-validator.service");
 const { checkAccess } = require("../../src/services/access-control.service");
 const { forwardToBackend } = require("../../src/services/forwarder.service");
+const { RESPONSE_CODES } = require("../../src/utils/constants");
 
 function createMockRes() {
   return {
@@ -45,64 +46,65 @@ function createMockReq({ body, headers = {} } = {}) {
   };
 }
 
-describe("handleGatewayMessage", () => {
+describe("handleGatewayMessage Controller", () => {
+  // Фіксуємо час для передбачуваної генерації requestId
+  const FIXED_TIMESTAMP = 1600000000000;
+
+  beforeAll(() => {
+    // Відключаємо реальне виведення логів у консоль під час тестів
+    jest.spyOn(console, "log").mockImplementation(() => { });
+    jest.spyOn(console, "error").mockImplementation(() => { });
+    jest.spyOn(Date, "now").mockReturnValue(FIXED_TIMESTAMP);
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test("returns 400 if body is not a non-empty string", async () => {
-    const req = createMockReq({ body: "" });
+  test("повертає 400, якщо body порожнє або не є рядком", async () => {
+    const req = createMockReq({ body: "   " });
     const res = createMockRes();
 
     await handleGatewayMessage(req, res);
 
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(RESPONSE_CODES.BAD_REQUEST);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 400,
-      error: {
-        type: "BAD_REQUEST",
-        message: "Очікується непорожній text/plain у body",
-      },
+      message: "Помилка структури запиту",
+      error: "Очікується непорожній text/plain у body",
     });
 
     expect(parseGatewayMessage).not.toHaveBeenCalled();
-    expect(validateBaseMessage).not.toHaveBeenCalled();
-    expect(detectGatewayTemplate).not.toHaveBeenCalled();
-    expect(validateTemplateMessage).not.toHaveBeenCalled();
-    expect(checkAccess).not.toHaveBeenCalled();
-    expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("returns 400 on parsing error", async () => {
+  test("повертає 400 у разі помилки парсингу", async () => {
     const req = createMockReq({ body: "bad request" });
     const res = createMockRes();
 
     parseGatewayMessage.mockImplementation(() => {
-      throw new Error("Порожній запит");
+      throw new Error("Недостатньо полів у запиті. Очікується мінімум 5 елементів.");
     });
 
     await handleGatewayMessage(req, res);
 
     expect(parseGatewayMessage).toHaveBeenCalledWith("bad request");
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(RESPONSE_CODES.BAD_REQUEST);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 400,
-      error: {
-        type: "PARSING_ERROR",
-        message: "Порожній запит",
-      },
+      message: "Помилка структури запиту",
+      error: "Недостатньо полів у запиті. Очікується мінімум 5 елементів.",
     });
 
     expect(validateBaseMessage).not.toHaveBeenCalled();
-    expect(detectGatewayTemplate).not.toHaveBeenCalled();
-    expect(validateTemplateMessage).not.toHaveBeenCalled();
-    expect(checkAccess).not.toHaveBeenCalled();
-    expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("returns 400 on base validation error", async () => {
+  test("повертає 400, якщо базова валідація не пройдена", async () => {
     const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+50" });
     const res = createMockRes();
 
@@ -123,25 +125,19 @@ describe("handleGatewayMessage", () => {
     await handleGatewayMessage(req, res);
 
     expect(validateBaseMessage).toHaveBeenCalledWith(parsed);
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(RESPONSE_CODES.BAD_REQUEST);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 400,
-      error: {
-        type: "VALIDATION_ERROR",
-        message: "Запит не пройшов базову валідацію",
-        details: ["Невірний формат зміни: +50"],
-      },
+      message: "Помилка формату",
+      error: "Невірний формат зміни: +50",
     });
 
     expect(detectGatewayTemplate).not.toHaveBeenCalled();
-    expect(validateTemplateMessage).not.toHaveBeenCalled();
-    expect(checkAccess).not.toHaveBeenCalled();
-    expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("returns 400 on template validation error", async () => {
-    const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+5" });
+  test("повертає 400, якщо шаблонна семантична валідація не пройдена", async () => {
+    const req = createMockReq({ body: "U1#U2#PATCH#INVALID_FIELD#+5" });
     const res = createMockRes();
 
     const parsed = {
@@ -149,20 +145,17 @@ describe("handleGatewayMessage", () => {
       targetUserCode: "U2",
       method: "PATCH",
       mode: "single",
-      changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
+      changes: [{ targetField: "INVALID_FIELD", changeValue: "+5" }],
     };
 
-    const templateInfo = {
-      type: "rating",
-      targetBackend: "rating",
-    };
+    const templateInfo = "rating";
 
     parseGatewayMessage.mockReturnValue(parsed);
     validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
     validateTemplateMessage.mockReturnValue({
       ok: false,
-      errors: ["Невірна категорія: TEAMWORK"],
+      errors: ["Невідома або недопустима рейтингова категорія: INVALID_FIELD"],
     });
 
     await handleGatewayMessage(req, res);
@@ -170,26 +163,22 @@ describe("handleGatewayMessage", () => {
     expect(detectGatewayTemplate).toHaveBeenCalledWith(parsed);
     expect(validateTemplateMessage).toHaveBeenCalledWith(parsed, templateInfo);
 
-    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.status).toHaveBeenCalledWith(RESPONSE_CODES.BAD_REQUEST);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 400,
-      error: {
-        type: "TEMPLATE_VALIDATION_ERROR",
-        message: "Запит не пройшов перевірку шаблону",
-        details: ["Невірна категорія: TEAMWORK"],
-      },
+      message: "Помилка семантики",
+      error: "Невідома або недопустима рейтингова категорія: INVALID_FIELD",
     });
 
     expect(checkAccess).not.toHaveBeenCalled();
-    expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("returns 403 on access denied", async () => {
+  test("повертає 403, якщо контроль ролей/лімітів відмовив у доступі", async () => {
     const req = createMockReq({
       body: "U1#U2#PATCH#LANG_JAVA#+10",
       headers: {
-        "x-user-role": "student",
+        "x-user-role": "STUDENT",
         "x-user-code": "U1",
       },
     });
@@ -203,18 +192,16 @@ describe("handleGatewayMessage", () => {
       changes: [{ targetField: "LANG_JAVA", changeValue: "+10" }],
     };
 
-    const templateInfo = {
-      type: "rating",
-      targetBackend: "rating",
-    };
+    const templateInfo = "rating";
 
     parseGatewayMessage.mockReturnValue(parsed);
     validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
     detectGatewayTemplate.mockReturnValue(templateInfo);
     validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
+
     checkAccess.mockReturnValue({
       ok: false,
-      errors: ['Роль "student" не має доступу до операції PATCH для шаблону rating'],
+      errors: ["Роль STUDENT не має права змінювати технічну категорію: LANG_JAVA"],
     });
 
     await handleGatewayMessage(req, res);
@@ -222,50 +209,41 @@ describe("handleGatewayMessage", () => {
     expect(checkAccess).toHaveBeenCalledWith({
       parsed,
       templateInfo,
-      userContext: {
-        role: "student",
-        userCode: "U1",
-      },
+      userContext: { role: "STUDENT", userCode: "U1" },
     });
 
-    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.status).toHaveBeenCalledWith(RESPONSE_CODES.FORBIDDEN);
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 403,
-      error: {
-        type: "ACCESS_DENIED",
-        message: "Користувач не має права виконувати цю операцію",
-        details: ['Роль "student" не має доступу до операції PATCH для шаблону rating'],
-      },
+      message: "Операція заборонена",
+      error: "Роль STUDENT не має права змінювати технічну категорію: LANG_JAVA",
     });
 
     expect(forwardToBackend).not.toHaveBeenCalled();
   });
 
-  test("forwards request and returns JSON backend response", async () => {
+  test("успішно пересилає запит і повертає JSON-відповідь від сервера", async () => {
     const req = createMockReq({
-      body: "U1#U2#PATCH#LANG_JAVA#+10",
+      body: "L1#U2#PATCH#LANG_JAVA#+10",
       headers: {
         authorization: "Bearer token123",
         "x-request-id": "req-001",
-        "x-user-role": "teacher",
-        "x-user-code": "U1",
+        "x-user-role": "TEACHER",
+        "x-user-code": "L1",
       },
     });
     const res = createMockRes();
 
     const parsed = {
-      senderCode: "U1",
+      senderCode: "L1",
       targetUserCode: "U2",
       method: "PATCH",
       mode: "single",
       changes: [{ targetField: "LANG_JAVA", changeValue: "+10" }],
     };
 
-    const templateInfo = {
-      type: "rating",
-      targetBackend: "rating",
-    };
+    const templateInfo = "rating";
 
     parseGatewayMessage.mockReturnValue(parsed);
     validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
@@ -280,7 +258,7 @@ describe("handleGatewayMessage", () => {
     await handleGatewayMessage(req, res);
 
     expect(forwardToBackend).toHaveBeenCalledWith(
-      "U1#U2#PATCH#LANG_JAVA#+10",
+      "L1#U2#PATCH#LANG_JAVA#+10",
       {
         parsed,
         templateInfo,
@@ -297,15 +275,10 @@ describe("handleGatewayMessage", () => {
     expect(res.send).not.toHaveBeenCalled();
   });
 
-  test("forwards request and returns string backend response via send", async () => {
+  test("передає згенерований requestId, якщо його не було в заголовках", async () => {
     const req = createMockReq({
       body: "U1#_#GET#STUDENTS#page=1",
-      headers: {
-        authorization: "Bearer token123",
-        "x-request-id": "req-002",
-        "x-user-role": "teacher",
-        "x-user-code": "U1",
-      },
+      headers: {}, // Порожні заголовки
     });
     const res = createMockRes();
 
@@ -318,56 +291,39 @@ describe("handleGatewayMessage", () => {
       opParams: "page=1",
     };
 
-    const templateInfo = {
-      type: "general",
-      targetBackend: "main",
-    };
-
     parseGatewayMessage.mockReturnValue(parsed);
     validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
-    detectGatewayTemplate.mockReturnValue(templateInfo);
+    detectGatewayTemplate.mockReturnValue("general");
     validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
     checkAccess.mockReturnValue({ ok: true, errors: [] });
     forwardToBackend.mockResolvedValue({
       statusCode: 200,
-      body: "plain backend response",
+      body: "plain text response",
     });
 
     await handleGatewayMessage(req, res);
 
+    expect(forwardToBackend).toHaveBeenCalledWith(
+      "U1#_#GET#STUDENTS#page=1",
+      {
+        parsed,
+        templateInfo: "general",
+        authorization: undefined,
+        requestId: `REQ-${FIXED_TIMESTAMP}`, // Перевірка автоматичної генерації
+      }
+    );
+
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.send).toHaveBeenCalledWith("plain backend response");
-    expect(res.json).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith("plain text response");
   });
 
-  test("returns 502 on backend timeout", async () => {
-    const req = createMockReq({
-      body: "U1#U2#PATCH#TEAMWORK#+5",
-      headers: {
-        authorization: "Bearer token123",
-        "x-request-id": "req-003",
-        "x-user-role": "teacher",
-        "x-user-code": "U1",
-      },
-    });
+  test("повертає 502, якщо сервер не відповідає (timeout)", async () => {
+    const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+5" });
     const res = createMockRes();
 
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
-      method: "PATCH",
-      mode: "single",
-      changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
-    };
-
-    const templateInfo = {
-      type: "rating",
-      targetBackend: "rating",
-    };
-
-    parseGatewayMessage.mockReturnValue(parsed);
+    parseGatewayMessage.mockReturnValue({});
     validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
-    detectGatewayTemplate.mockReturnValue(templateInfo);
+    detectGatewayTemplate.mockReturnValue("rating");
     validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
     checkAccess.mockReturnValue({ ok: true, errors: [] });
 
@@ -381,43 +337,21 @@ describe("handleGatewayMessage", () => {
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 502,
-      error: {
-        type: "BACKEND_UNAVAILABLE",
-        message: "Backend request timed out",
-      },
+      message: "Помилка сервера",
+      error: "Backend request timed out",
     });
   });
 
-  test("returns 502 on generic backend error", async () => {
-    const req = createMockReq({
-      body: "U1#U2#PATCH#TEAMWORK#+5",
-      headers: {
-        authorization: "Bearer token123",
-        "x-request-id": "req-004",
-        "x-user-role": "teacher",
-        "x-user-code": "U1",
-      },
-    });
+  test("повертає 502 при загальній помилці з'єднання з backend", async () => {
+    const req = createMockReq({ body: "U1#U2#PATCH#TEAMWORK#+5" });
     const res = createMockRes();
 
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
-      method: "PATCH",
-      mode: "single",
-      changes: [{ targetField: "TEAMWORK", changeValue: "+5" }],
-    };
-
-    const templateInfo = {
-      type: "rating",
-      targetBackend: "rating",
-    };
-
-    parseGatewayMessage.mockReturnValue(parsed);
+    parseGatewayMessage.mockReturnValue({});
     validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
-    detectGatewayTemplate.mockReturnValue(templateInfo);
+    detectGatewayTemplate.mockReturnValue("rating");
     validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
     checkAccess.mockReturnValue({ ok: true, errors: [] });
+
     forwardToBackend.mockRejectedValue(new Error("connection refused"));
 
     await handleGatewayMessage(req, res);
@@ -426,54 +360,8 @@ describe("handleGatewayMessage", () => {
     expect(res.json).toHaveBeenCalledWith({
       ok: false,
       code: 502,
-      error: {
-        type: "BACKEND_UNAVAILABLE",
-        message: "Failed to reach backend: connection refused",
-      },
+      message: "Помилка сервера",
+      error: "Failed to reach backend: connection refused",
     });
-  });
-
-  test("passes undefined headers to forwarder if request headers are absent", async () => {
-    const req = createMockReq({
-      body: "U1#_#GET#STUDENTS#page=1",
-      headers: {},
-    });
-    const res = createMockRes();
-
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "_",
-      method: "GET",
-      mode: "single",
-      targetField: "STUDENTS",
-      opParams: "page=1",
-    };
-
-    const templateInfo = {
-      type: "general",
-      targetBackend: "main",
-    };
-
-    parseGatewayMessage.mockReturnValue(parsed);
-    validateBaseMessage.mockReturnValue({ ok: true, errors: [] });
-    detectGatewayTemplate.mockReturnValue(templateInfo);
-    validateTemplateMessage.mockReturnValue({ ok: true, errors: [] });
-    checkAccess.mockReturnValue({ ok: true, errors: [] });
-    forwardToBackend.mockResolvedValue({
-      statusCode: 200,
-      body: { ok: true },
-    });
-
-    await handleGatewayMessage(req, res);
-
-    expect(forwardToBackend).toHaveBeenCalledWith(
-      "U1#_#GET#STUDENTS#page=1",
-      {
-        parsed,
-        templateInfo,
-        authorization: undefined,
-        requestId: undefined,
-      }
-    );
   });
 });

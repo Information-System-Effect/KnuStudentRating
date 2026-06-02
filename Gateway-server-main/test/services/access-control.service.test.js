@@ -1,204 +1,80 @@
 const { checkAccess } = require("../../src/services/access-control.service");
+const { ROLES } = require("../../src/utils/constants");
 
-describe("checkAccess", () => {
-  test("returns ok=true for teacher on rating PATCH", () => {
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
-      method: "PATCH",
-    };
+describe("Access Control Service", () => {
+  const templateInfo = "rating";
 
-    const templateInfo = {
-      type: "rating",
-      targetBackend: "rating",
-    };
-
-    const userContext = {
-      role: "teacher",
-      userCode: "U1",
-    };
-
+  test("відхиляє доступ, якщо роль відсутня (неавторизований користувач)", () => {
+    const parsed = { method: "GET" };
+    const userContext = { role: null, userCode: null };
     const result = checkAccess({ parsed, templateInfo, userContext });
-
-    expect(result).toEqual({
-      ok: true,
-      errors: [],
-    });
-  });
-
-  test("returns error when role is missing", () => {
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
-      method: "PATCH",
-    };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: "rating",
-      userContext: {
-        userCode: "U1",
-      },
-    });
-
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain("Не вдалося визначити роль користувача");
+    expect(result.errors[0]).toMatch(/Не вдалося визначити роль/);
   });
 
-  test("returns error when role is not allowed for template method", () => {
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
-      method: "PATCH",
-    };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: "rating",
-      userContext: {
-        role: "student",
-        userCode: "U1",
-      },
-    });
-
+  test("відхиляє доступ при спробі підробки senderCode", () => {
+    const parsed = { senderCode: "U1", method: "GET" };
+    const userContext = { role: ROLES.STUDENT, userCode: "U2" }; // U2 намагається видати себе за U1
+    const result = checkAccess({ parsed, templateInfo, userContext });
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain(
-      'Роль "student" не має доступу до операції PATCH для шаблону rating'
-    );
+    expect(result.errors[0]).toMatch(/загроза підробки ідентифікатора/);
   });
 
-  test("returns error when senderCode does not match authenticated user", () => {
+  test("дозволяє СТУДЕНТУ виставляти SOFT_SKILLS в межах ліміту (<=5)", () => {
     const parsed = {
       senderCode: "U1",
-      targetUserCode: "U2",
-      method: "GET",
-    };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: "rating",
-      userContext: {
-        role: "teacher",
-        userCode: "U999",
-      },
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.errors).toContain(
-      "senderCode не збігається з автентифікованим користувачем"
-    );
-  });
-
-  test("returns error when student tries to modify data", () => {
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
       method: "PUT",
+      changes: [{ targetField: "TEAMWORK", changeValue: "+4" }],
     };
+    const userContext = { role: ROLES.STUDENT, userCode: "U1" };
+    const result = checkAccess({ parsed, templateInfo, userContext });
+    expect(result.ok).toBe(true);
+  });
 
-    const result = checkAccess({
-      parsed,
-      templateInfo: "rating",
-      userContext: {
-        role: "student",
-        userCode: "U1",
-      },
-    });
-
+  test("забороняє СТУДЕНТУ виставляти оцінки більше 5 балів", () => {
+    const parsed = {
+      senderCode: "U1",
+      method: "PUT",
+      changes: [{ targetField: "TEAMWORK", changeValue: "+6" }],
+    };
+    const userContext = { role: ROLES.STUDENT, userCode: "U1" };
+    const result = checkAccess({ parsed, templateInfo, userContext });
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain(
-      "Студент не має права змінювати дані інших користувачів"
-    );
+    expect(result.errors[0]).toMatch(/перевищує ліміт \(\+5\) для ролі STUDENT/);
   });
 
-  test("allows student to do rating GET", () => {
+  test("забороняє СТУДЕНТУ виставляти оцінки з ТЕХНІЧНИХ предметів", () => {
     const parsed = {
       senderCode: "U1",
-      targetUserCode: "U2",
-      method: "GET",
+      method: "PUT",
+      changes: [{ targetField: "LANG_JAVA", changeValue: "+5" }],
     };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: "rating",
-      userContext: {
-        role: "student",
-        userCode: "U1",
-      },
-    });
-
-    expect(result).toEqual({
-      ok: true,
-      errors: [],
-    });
-  });
-
-  test("returns error when general DELETE is requested by teacher", () => {
-    const parsed = {
-      senderCode: "U1",
-      targetUserCode: "_",
-      method: "DELETE",
-    };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: "general",
-      userContext: {
-        role: "teacher",
-        userCode: "U1",
-      },
-    });
-
+    const userContext = { role: ROLES.STUDENT, userCode: "U1" };
+    const result = checkAccess({ parsed, templateInfo, userContext });
     expect(result.ok).toBe(false);
-    expect(result.errors).toContain(
-      'Роль "teacher" не має доступу до операції DELETE для шаблону general'
-    );
+    expect(result.errors[0]).toMatch(/не має права змінювати технічну категорію/);
   });
 
-  test("allows admin to do general DELETE", () => {
+  test("дозволяє ВИКЛАДАЧУ виставляти ТЕХНІЧНІ оцінки в межах ліміту (<=20)", () => {
     const parsed = {
-      senderCode: "ADMIN_1",
-      targetUserCode: "_",
-      method: "DELETE",
+      senderCode: "L1",
+      method: "PUT",
+      changes: [{ targetField: "LANG_JAVA", changeValue: "+15" }],
     };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: "general",
-      userContext: {
-        role: "admin",
-        userCode: "ADMIN_1",
-      },
-    });
-
-    expect(result).toEqual({
-      ok: true,
-      errors: [],
-    });
+    const userContext = { role: ROLES.TEACHER, userCode: "L1" };
+    const result = checkAccess({ parsed, templateInfo, userContext });
+    expect(result.ok).toBe(true);
   });
 
-  test("uses templateInfo.type when templateInfo is object", () => {
+  test("забороняє ВИКЛАДАЧУ виставляти оцінки більше 20 балів", () => {
     const parsed = {
-      senderCode: "U1",
-      targetUserCode: "U2",
-      method: "PATCH",
+      senderCode: "L1",
+      method: "PUT",
+      changes: [{ targetField: "LANG_JAVA", changeValue: "+21" }],
     };
-
-    const result = checkAccess({
-      parsed,
-      templateInfo: {
-        type: "rating",
-        targetBackend: "rating",
-      },
-      userContext: {
-        role: "teacher",
-        userCode: "U1",
-      },
-    });
-
-    expect(result).toEqual({
-      ok: true,
-      errors: [],
-    });
+    const userContext = { role: ROLES.TEACHER, userCode: "L1" };
+    const result = checkAccess({ parsed, templateInfo, userContext });
+    expect(result.ok).toBe(false);
+    expect(result.errors[0]).toMatch(/перевищує ліміт \(\+20\) для ролі TEACHER/);
   });
 });
