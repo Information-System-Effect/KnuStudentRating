@@ -1,4 +1,5 @@
 const { forwardToBackend } = require("../../src/services/forwarder.service");
+const { SECURITY } = require("../../src/utils/constants"); // Імпортуємо константи
 
 describe("Forwarder Service", () => {
   const OLD_ENV = process.env;
@@ -6,7 +7,8 @@ describe("Forwarder Service", () => {
   beforeEach(() => {
     jest.resetModules(); // Очищаємо кеш модулів
     process.env = { ...OLD_ENV }; // Робимо копію ENV
-    global.fetch = jest.fn(); // Мокаємо глобальний fetch
+    // Ось ця заглушка (mock) імітує роботу backend-сервера
+    global.fetch = jest.fn();
   });
 
   afterAll(() => {
@@ -33,8 +35,8 @@ describe("Forwarder Service", () => {
 
   test("успішно підписує та відправляє запит на RATING backend", async () => {
     process.env.BACKEND_RATING_URL = "http://rating-service/api";
-    process.env.GATEWAY_SECRET_KEY = "test_secret"; // Налаштування секрету для констант
 
+    // Налаштовуємо нашу заглушку (mock) повертати успішну відповідь
     global.fetch.mockResolvedValue({
       status: 200,
       text: jest.fn().mockResolvedValue(JSON.stringify({ ok: true, data: "success" })),
@@ -57,14 +59,14 @@ describe("Forwarder Service", () => {
     expect(options.method).toBe("POST");
     expect(options.body).toBe(rawMessage);
 
-    // Перевіряємо наявність службових заголовків безпеки
-    expect(options.headers["X-Gateway-Timestamp"]).toBeDefined();
+    // Перевіряємо наявність службових заголовків безпеки, використовуючи КОНСТАНТИ
+    expect(options.headers[SECURITY.HEADER_TIMESTAMP]).toBeDefined();
     expect(options.headers["X-Gateway-Nonce"]).toBeDefined();
-    expect(options.headers["X-Gateway-Signature"]).toBeDefined();
+    expect(options.headers[SECURITY.HEADER_SIGNATURE]).toBeDefined();
     expect(options.headers["X-Request-Id"]).toBe("req-123");
     expect(options.headers["Authorization"]).toBe("Bearer token");
 
-    // Перевіряємо, чи правильно розпарсилась відповідь
+    // Перевіряємо, чи правильно розпарсилась відповідь від нашої заглушки
     expect(result.statusCode).toBe(200);
     expect(result.body).toEqual({ ok: true, data: "success" });
   });
@@ -72,6 +74,7 @@ describe("Forwarder Service", () => {
   test("повертає сирий текст, якщо backend відповів не JSON форматом", async () => {
     process.env.BACKEND_MAIN_URL = "http://main-service/api";
 
+    // Налаштовуємо заглушку повертати звичайний текст
     global.fetch.mockResolvedValue({
       status: 200,
       text: jest.fn().mockResolvedValue("Plain text response from backend"),
