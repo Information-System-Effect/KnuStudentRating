@@ -22,6 +22,11 @@ jest.mock("../../src/services/forwarder.service", () => ({
   forwardToBackend: jest.fn(),
 }));
 
+// ДОДАНО: Мокаємо сервіс логування, щоб він не створював файли під час тестів
+jest.mock("../../src/services/logger.service", () => ({
+  logEvent: jest.fn(),
+}));
+
 const { handleGatewayMessage } = require("../../src/controllers/gateway.controller");
 const { parseGatewayMessage } = require("../../src/services/parser.service");
 const { validateBaseMessage } = require("../../src/services/base-validator.service");
@@ -29,6 +34,8 @@ const { detectGatewayTemplate } = require("../../src/services/template-detector.
 const { validateTemplateMessage } = require("../../src/services/template-validator.service");
 const { checkAccess } = require("../../src/services/access-control.service");
 const { forwardToBackend } = require("../../src/services/forwarder.service");
+// ДОДАНО: Імпортуємо замоканий логер для перевірок
+const { logEvent } = require("../../src/services/logger.service");
 const { RESPONSE_CODES } = require("../../src/utils/constants");
 
 function createMockRes() {
@@ -47,13 +54,10 @@ function createMockReq({ body, headers = {} } = {}) {
 }
 
 describe("handleGatewayMessage Controller", () => {
-  // Фіксуємо час для передбачуваної генерації requestId
   const FIXED_TIMESTAMP = 1600000000000;
 
   beforeAll(() => {
-    // Відключаємо реальне виведення логів у консоль під час тестів
-    jest.spyOn(console, "log").mockImplementation(() => { });
-    jest.spyOn(console, "error").mockImplementation(() => { });
+    // ЗМІНЕНО: Шпигуни за console видалені, оскільки логіку винесено в logger.service
     jest.spyOn(Date, "now").mockReturnValue(FIXED_TIMESTAMP);
   });
 
@@ -80,6 +84,8 @@ describe("handleGatewayMessage Controller", () => {
     });
 
     expect(parseGatewayMessage).not.toHaveBeenCalled();
+    // ДОДАНО: Перевірка запису помилки в журнал
+    expect(logEvent).toHaveBeenCalledWith("ERROR", "VALIDATION", "Порожній запит");
   });
 
   test("повертає 400 у разі помилки парсингу", async () => {
@@ -273,12 +279,14 @@ describe("handleGatewayMessage Controller", () => {
       result: "updated",
     });
     expect(res.send).not.toHaveBeenCalled();
+    // ДОДАНО: Перевірка успішного логування пересилання
+    expect(logEvent).toHaveBeenCalledWith("INFO", "FORWARD_SUCCESS", expect.any(String));
   });
 
   test("передає згенерований requestId, якщо його не було в заголовках", async () => {
     const req = createMockReq({
       body: "U1#_#GET#STUDENTS#page=1",
-      headers: {}, // Порожні заголовки
+      headers: {},
     });
     const res = createMockRes();
 
@@ -309,7 +317,7 @@ describe("handleGatewayMessage Controller", () => {
         parsed,
         templateInfo: "general",
         authorization: undefined,
-        requestId: `REQ-${FIXED_TIMESTAMP}`, // Перевірка автоматичної генерації
+        requestId: `REQ-${FIXED_TIMESTAMP}`,
       }
     );
 

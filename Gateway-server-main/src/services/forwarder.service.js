@@ -1,4 +1,21 @@
-﻿const crypto = require("crypto");
+﻿/**
+ * @module ForwarderService
+ * @description Сервіс безпечної маршрутизації (форвардингу).
+ * Відповідає за криптографічний підпис запитів та взаємодію із сервером обробки даних (бекендом).
+ */
+
+/**
+ * Генерує службові заголовки (HMAC-SHA256 підпис, timestamp, nonce) та відправляє запит на бекенд.
+ *
+ * @async
+ * @param {string} rawMessage - Оригінальне текстове повідомлення.
+ * @param {Object} options - Налаштування маршрутизації та контекст.
+ * @returns {Promise<{statusCode: number, body: any}>} Відповідь від сервера.
+ * @throws {Error} У разі таймауту або помилки з'єднання.
+ */
+// async function forwardToBackend(rawMessage, options = {}) { ... }
+
+const crypto = require("crypto");
 const { SECURITY } = require("../utils/constants");
 
 /**

@@ -1,4 +1,20 @@
 ﻿/**
+ * @module GatewayController
+ * @description Основний контролер шлюзу. Керує життєвим циклом вхідного текстового запиту,
+ * об'єднуючи парсинг, валідацію, контроль доступу та маршрутизацію в єдиний пайплайн (Middleware Chain).
+ */
+
+/**
+ * Обробляє вхідний gateway-запит, виконує всі етапи перевірки та повертає JSON-відповідь.
+ *
+ * @async
+ * @param {import('express').Request} req - Об'єкт HTTP-запиту (тіло у форматі text/plain).
+ * @param {import('express').Response} res - Об'єкт HTTP-відповіді.
+ * @returns {Promise<void>}
+ */
+// async function handleGatewayMessage(req, res) { ... }
+
+/**
  * Контролер шлюзу для обробки текстових запитів внутрішнього протоколу.
  */
 
@@ -8,16 +24,8 @@ const { detectGatewayTemplate } = require("../services/template-detector.service
 const { validateTemplateMessage } = require("../services/template-validator.service");
 const { checkAccess } = require("../services/access-control.service");
 const { forwardToBackend } = require("../services/forwarder.service");
+const { logEvent } = require("../services/logger.service");
 const { RESPONSE_CODES } = require("../utils/constants");
-
-/**
- * Допоміжна функція для структурованого логування подій (реалізація п. 2.5 курсової)
- */
-function logEvent(level, stage, message, details = null) {
-  const logEntry = { timestamp: new Date().toISOString(), level, stage, message, details };
-  if (level === "ERROR") console.error(JSON.stringify(logEntry));
-  else console.log(JSON.stringify(logEntry));
-}
 
 /**
  * Обробляє вхідний gateway-запит у текстовому форматі.
