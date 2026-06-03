@@ -27,99 +27,88 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Сервіс визначення шаблону gateway-запиту.
- *
- * Призначення:
- * - проаналізувати вже розпарсений і базово валідний запит;
- * - визначити, до якого логічного шаблону він належить;
- * - підготувати основу для подальшої шаблонної валідації
- *   та маршрутизації на відповідний backend.
- *
- * Поточні підтримувані шаблони:
- * - "rating"  — запити, пов’язані з рейтинговими категоріями;
- * - "general" — усі інші запити.
+ * @module TemplateDetectorService
+ * @description Сервіс контекстного аналізу. Визначає логічний шаблон запиту 
+ * (наприклад, "rating" або "general") на основі цільових полів та методів.
  */
-
-const { ALLOWED_CATEGORIES } = require("../utils/constants");
 
 /**
- * Перевіряє, чи входить передане значення до списку дозволених категорій рейтингу.
+ * Класифікує запит за бізнес-типом взаємодії.
  *
- * Перед порівнянням значення:
- * - очищується від пробілів на початку та в кінці;
- * - перетворюється до верхнього регістру.
- *
- * @param {string} value - Назва категорії, яку потрібно перевірити.
- * @returns {boolean} true, якщо категорія входить до списку ALLOWED_CATEGORIES.
+ * @param {Object} parsed - Об'єкт запиту.
+ * @returns {string} Тип шаблону: "rating" (оцінювання) або "general" (загальні запити).
  */
-function isAllowedCategory(value) {
+// function detectGatewayTemplate(parsed) { ... }
+
+/**
+ * Сервіс визначення контекстно-залежного шаблону gateway-запиту.
+ *
+ * Призначення:
+ * - проаналізувати вже розпарсений запит;
+ * - класифікувати його за бізнес-типом взаємодії ("rating" або "general");
+ * - забезпечити основу для динамічної семантичної валідації (реалізація Розділу 2.1).
+ */
+
+const { AVAILABLE_SUBJECTS } = require("../utils/constants");
+
+/**
+ * Перевіряє, чи входить передане поле до списку дозволених категорій рейтингу.
+ * Використовує глобальний масив доступних предметів (технічних та софт-скілів).
+ *
+ * @param {string} value - Назва поля (цілі), яку потрібно перевірити.
+ * @returns {boolean} true, якщо категорія є рейтинговою.
+ */
+function isRatingCategory(value) {
   const normalized = (value || "").trim().toUpperCase();
-  return ALLOWED_CATEGORIES.includes(normalized);
+  return AVAILABLE_SUBJECTS.includes(normalized);
 }
 
 /**
  * Визначає логічний шаблон gateway-запиту.
  *
- * Логіка:
- * - якщо запит адресований конкретному користувачу (`targetUserCode !== "_"`)
- *   і для GET / DELETE містить допустиму рейтингову категорію,
- *   то шаблон визначається як "rating";
- * - якщо запит адресований конкретному користувачу
- *   і для PUT / PATCH усі зміни належать до рейтингових категорій,
- *   то шаблон також визначається як "rating";
- * - в усіх інших випадках повертається "general".
+ * Логіка розпізнавання:
+ * 1. Якщо запит адресований конкретному користувачу (targetUserCode !== "_").
+ * 2. Якщо метод GET або DELETE і поле міститься у списку рейтингових.
+ * 3. Якщо метод PUT або PATCH і ВСІ поля у складеному масиві змін (changes) 
+ * належать до рейтингових категорій.
+ * Якщо умови виконуються — повертається контекст "rating".
+ * В іншому випадку — повертається "general" (наприклад, запит на список студентів).
  *
- * Таким чином, цей сервіс не перевіряє загальну коректність структури запиту,
- * а лише класифікує вже базово валідний запит за бізнес-типом.
- *
- * @param {object} parsed - Розпарсений gateway-запит.
+ * @param {object} parsed - Об'єкт запиту після роботи парсера.
  * @returns {string} Тип шаблону: "rating" або "general".
  */
 function detectGatewayTemplate(parsed) {
-  /**
-   * Ознака того, що запит спрямований на конкретного користувача,
-   * а не є загальним системним запитом.
-   */
+  // Якщо запит системний (не на конкретного користувача), це точно не зміна рейтингу
   const hasTargetUser = parsed.targetUserCode !== "_";
 
-  /**
-   * Визначення рейтингового шаблону для GET / DELETE.
-   *
-   * Умови:
-   * - є targetUser;
-   * - метод GET або DELETE;
-   * - targetField є дозволеною рейтинговою категорією.
-   */
-  if (
-    hasTargetUser &amp;&amp;
-    (parsed.method === "GET" || parsed.method === "DELETE") &amp;&amp;
-    isAllowedCategory(parsed.targetField)
-  ) {
-    return "rating";
+  if (!hasTargetUser) {
+    return "general";
   }
 
-  /**
-   * Визначення рейтингового шаблону для PUT / PATCH.
-   *
-   * Умови:
-   * - є targetUser;
-   * - метод PUT або PATCH;
-   * - changes є непорожнім масивом;
-   * - усі targetField у changes належать до дозволених рейтингових категорій.
-   */
-  if (
-    hasTargetUser &amp;&amp;
-    (parsed.method === "PUT" || parsed.method === "PATCH") &amp;&amp;
-    Array.isArray(parsed.changes) &amp;&amp;
-    parsed.changes.length > 0 &amp;&amp;
-    parsed.changes.every((change) => isAllowedCategory(change.targetField))
-  ) {
-    return "rating";
+  // Визначення шаблону для одинарних запитів (GET / DELETE)
+  if (parsed.mode === "single" &amp;&amp; (parsed.method === "GET" || parsed.method === "DELETE")) {
+    if (isRatingCategory(parsed.targetField)) {
+      return "rating";
+    }
   }
 
-  /**
-   * Усі інші запити відносяться до загального шаблону.
-   */
+  // Визначення шаблону для складених запитів (PUT / PATCH)
+  if ((parsed.mode === "single" || parsed.mode === "multi") &amp;&amp;
+    (parsed.method === "PUT" || parsed.method === "PATCH")) {
+
+    // Перевіряємо, чи існує масив змін і чи всі вони стосуються рейтингу
+    if (Array.isArray(parsed.changes) &amp;&amp; parsed.changes.length > 0) {
+      const allChangesAreRating = parsed.changes.every((change) =>
+        isRatingCategory(change.targetField)
+      );
+
+      if (allChangesAreRating) {
+        return "rating";
+      }
+    }
+  }
+
+  // Всі інші типи взаємодії підпадають під загальний шаблон
   return "general";
 }
 
@@ -133,13 +122,13 @@ module.exports = { detectGatewayTemplate };</code></pre>
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#ALLOWED_OPERATIONS">ALLOWED_OPERATIONS</a></li><li><a href="global.html#AVAILABLE_SUBJECTS">AVAILABLE_SUBJECTS</a></li><li><a href="global.html#DEFAULT_BACKEND_BASE_URL">DEFAULT_BACKEND_BASE_URL</a></li><li><a href="global.html#EXACT_PROXY_PATHS">EXACT_PROXY_PATHS</a></li><li><a href="global.html#FORBIDDEN_FORWARD_HEADERS">FORBIDDEN_FORWARD_HEADERS</a></li><li><a href="global.html#IGNORED_RESPONSE_HEADERS">IGNORED_RESPONSE_HEADERS</a></li><li><a href="global.html#NO_BODY_METHODS">NO_BODY_METHODS</a></li><li><a href="global.html#PORT">PORT</a></li><li><a href="global.html#PROXY_PREFIXES">PROXY_PREFIXES</a></li><li><a href="global.html#TEMPLATE_PERMISSIONS">TEMPLATE_PERMISSIONS</a></li><li><a href="global.html#app">app</a></li><li><a href="global.html#buildSignaturePayload">buildSignaturePayload</a></li><li><a href="global.html#checkAccess">checkAccess</a></li><li><a href="global.html#detectGatewayTemplate">detectGatewayTemplate</a></li><li><a href="global.html#express">express</a></li><li><a href="global.html#forwardToBackend">forwardToBackend</a></li><li><a href="global.html#generateNonce">generateNonce</a></li><li><a href="global.html#getForwardHeaders">getForwardHeaders</a></li><li><a href="global.html#handleGatewayMessage">handleGatewayMessage</a></li><li><a href="global.html#handleProxyRequest">handleProxyRequest</a></li><li><a href="global.html#isAllowedCategory">isAllowedCategory</a></li><li><a href="global.html#isValidChangeValue">isValidChangeValue</a></li><li><a href="global.html#isValidQueryParams">isValidQueryParams</a></li><li><a href="global.html#isValidTargetField">isValidTargetField</a></li><li><a href="global.html#isValidUserCode">isValidUserCode</a></li><li><a href="global.html#normalizeTemplateType">normalizeTemplateType</a></li><li><a href="global.html#parseGatewayMessage">parseGatewayMessage</a></li><li><a href="global.html#proxyToBackend">proxyToBackend</a></li><li><a href="global.html#readRequestBody">readRequestBody</a></li><li><a href="global.html#resolveBackendBaseUrl">resolveBackendBaseUrl</a></li><li><a href="global.html#resolveBackendUrl">resolveBackendUrl</a></li><li><a href="global.html#router">router</a></li><li><a href="global.html#shouldProxy">shouldProxy</a></li><li><a href="global.html#signPayload">signPayload</a></li><li><a href="global.html#validateBaseMessage">validateBaseMessage</a></li><li><a href="global.html#validateGeneralTemplate">validateGeneralTemplate</a></li><li><a href="global.html#validateRatingTemplate">validateRatingTemplate</a></li><li><a href="global.html#validateTemplateMessage">validateTemplateMessage</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-AccessControlService.html">AccessControlService</a></li><li><a href="module-AppConfig.html">AppConfig</a></li><li><a href="module-BaseValidatorService.html">BaseValidatorService</a></li><li><a href="module-Constants.html">Constants</a></li><li><a href="module-ForwarderService.html">ForwarderService</a></li><li><a href="module-GatewayController.html">GatewayController</a></li><li><a href="module-GatewayRoutes.html">GatewayRoutes</a></li><li><a href="module-LoggerService.html">LoggerService</a></li><li><a href="module-ParserService.html">ParserService</a></li><li><a href="module-ProxyController.html">ProxyController</a></li><li><a href="module-ProxyService.html">ProxyService</a></li><li><a href="module-ServerEntry.html">ServerEntry</a></li><li><a href="module-TemplateDetectorService.html">TemplateDetectorService</a></li><li><a href="module-TemplateValidatorService.html">TemplateValidatorService</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri May 01 2026 17:53:43 GMT+0300 (за східноєвропейським літнім часом)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Jun 03 2026 19:08:14 GMT+0300 (за східноєвропейським літнім часом)
 </footer>
 
 <script> prettyPrint(); </script>

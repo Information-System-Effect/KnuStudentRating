@@ -27,88 +27,72 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>﻿/**
+ * @module ParserService
+ * @description Сервіс синтаксичного розбору текстових повідомлень протоколу шлюзу.
+ */
+
+/**
+ * Розбиває сирий рядок за розділювачем '#' та формує структурований DTO-об'єкт.
+ * Підтримує транзакційну перевірку парності для складених запитів (масове оновлення).
+ *
+ * @param {string} raw - Сирий текстовий запит (наприклад, "U1#U2#PUT#LANG_JAVA#+5").
+ * @returns {Object} Розпарсений об'єкт із полями: senderCode, targetUserCode, method, targetField, opParams (або changes).
+ * @throws {Error} Якщо запит порожній або містить недостатню кількість полів.
+ */
+// function parseGatewayMessage(raw) { ... }
+
+/**
  * Сервіс парсингу gateway-повідомлень.
  *
  * Призначення:
  * - приймати сирий текстовий запит внутрішнього протоколу;
- * - перевіряти його базову структурну цілісність;
- * - перетворювати текстове повідомлення у структурований об'єкт,
- *   зручний для подальшої валідації, визначення шаблону та маршрутизації.
+ * - перевіряти його базову структурну цілісність (наявність обов'язкових полів, парність параметрів);
+ * - перетворювати текстове повідомлення у структурований DTO-об'єкт,
+ * зручний для подальшої валідації, визначення шаблону та маршрутизації.
  *
- * Підтримувані формати:
+ * Підтримувані шаблони (формати):
  *
- * GET / DELETE:
- * senderCode#targetUserCode#METHOD#targetField#opParams
+ * Одинарний запит (GET / DELETE):
+ * SENDER_CODE#TARGET_USER_CODE#METHOD#TARGET_FIELD#PARAMS
  *
- * PUT / PATCH:
- * senderCode#targetUserCode#METHOD#targetField#changeValue[#targetField#changeValue...]
+ * Складений запит на масове оновлення (PUT / PATCH):
+ * SENDER_CODE#TARGET_USER_CODE#METHOD#TARGET_FIELD#PARAMS[#TARGET_FIELD#PARAMS...]
  */
 
 /**
  * Розбирає сире текстове повідомлення gateway-протоколу.
  *
- * Логіка роботи:
- * 1. Перевіряє, що запит не порожній.
- * 2. Розбиває рядок за роздільником "#".
- * 3. Виділяє senderCode, targetUserCode, method та решту елементів.
- * 4. Для GET / DELETE формує об'єкт із targetField та opParams.
- * 5. Для PUT / PATCH формує масив змін changes.
- * 6. Якщо метод невідомий, повертає об'єкт у режимі "unknown",
- *    щоб подальшу помилку міг сформувати валідатор.
- *
- * @param {string} raw - Сирий текстовий запит внутрішнього протоколу.
+ * @param {string} raw - Сирий текстовий запит (наприклад, "U1#U2#PUT#LANG_JAVA#+5")
  * @returns {object} Розпарсений об'єкт gateway-запиту.
- * @throws {Error} Якщо запит порожній або має некоректну кількість полів.
+ * @throws {Error} Якщо запит порожній або має порушену структуру (помилка формату 400).
  */
 function parseGatewayMessage(raw) {
-  /**
-   * Перевірка 1.
-   * Запит повинен бути непорожнім рядком.
-   */
+  // 1. Перевірка наявності запиту
   if (typeof raw !== "string" || !raw.trim()) {
-    throw new Error("Порожній запит");
+    throw new Error("Порожній запит. Неможливо виконати парсинг.");
   }
 
-  /**
-   * Видаляємо пробіли з початку та кінця рядка,
-   * після чого розбиваємо повідомлення на частини за символом "#".
-   */
-  const parts = raw.trim().split("#");
+  // 2. Розбиття повідомлення на блоки за розділювачем "#"
+  const parts = raw.trim().split("#").map(part => part.trim());
 
-  /**
-   * Перевірка 2.
-   * Мінімальна кількість частин у коректному запиті — 5.
-   */
+  // 3. Перевірка базової мінімальної довжини (мінімум 5 полів за протоколом)
   if (parts.length &lt; 5) {
-    throw new Error("Недостатньо полів у запиті");
+    throw new Error("Недостатньо полів у запиті. Очікується мінімум 5 елементів.");
   }
 
-  /**
-   * Перші три елементи завжди мають однакову структуру:
-   * - senderCode
-   * - targetUserCode
-   * - method
-   *
-   * Усе, що після них, записується в масив rest.
-   */
+  // 4. Виділення базової мета-інформації
   const [senderCode, targetUserCode, methodRaw, ...rest] = parts;
 
-  /**
-   * Метод нормалізується до верхнього регістру,
-   * щоб підтримувати однакове порівняння незалежно від написання.
-   */
-  const method = methodRaw.trim().toUpperCase();
+  if (!senderCode || !targetUserCode || !methodRaw) {
+    throw new Error("Некоректна базова структура. Відсутній відправник, ціль або метод.");
+  }
 
-  /**
-   * Обробка GET / DELETE.
-   *
-   * Для цих методів після METHOD повинно бути рівно 2 поля:
-   * - targetField
-   * - opParams
-   */
+  const method = methodRaw.toUpperCase();
+
+  // 5. Обробка методів читання/видалення (очікується рівно одна ціль та параметри)
   if (method === "GET" || method === "DELETE") {
     if (rest.length !== 2) {
-      throw new Error(`Для методу "${method}" очікується 5 полів`);
+      throw new Error(`Для методу "${method}" очікується рівно 5 полів (зайві або пропущені елементи).`);
     }
 
     const [targetField, opParams] = rest;
@@ -123,30 +107,20 @@ function parseGatewayMessage(raw) {
     };
   }
 
-  /**
-   * Обробка PATCH / PUT.
-   *
-   * Для цих методів після METHOD має бути парна кількість елементів,
-   * які інтерпретуються як пари:
-   * - targetField
-   * - changeValue
-   *
-   * Якщо пар немає або кількість елементів непарна,
-   * парсер повертає помилку.
-   */
+  // 6. Обробка методів оновлення (підтримка складених запитів)
   if (method === "PATCH" || method === "PUT") {
+    // Перевірка парності (кожному TARGET_FIELD має відповідати свій PARAM)
     if (rest.length &lt; 2 || rest.length % 2 !== 0) {
-      throw new Error('Для методу "PATCH" або "PUT" після нього мають іти пари');
+      throw new Error("Порушено парність параметрів для масового оновлення. Відсутнє значення для одного з полів.");
     }
 
-    /**
-     * Формування масиву змін.
-     * Кожна пара targetField/changeValue перетворюється
-     * на окремий об'єкт у масиві changes.
-     */
     const changes = [];
 
+    // Транзакційне формування масиву змін
     for (let i = 0; i &lt; rest.length; i += 2) {
+      if (!rest[i] || !rest[i + 1]) {
+        throw new Error(`Порожнє поле або значення у парі на позиції ${i + 1}`);
+      }
       changes.push({
         targetField: rest[i],
         changeValue: rest[i + 1],
@@ -162,14 +136,8 @@ function parseGatewayMessage(raw) {
     };
   }
 
-  /**
-   * Якщо метод не належить до підтримуваних,
-   * парсер не зупиняє обробку повністю, а повертає об'єкт
-   * у режимі "unknown".
-   *
-   * Це дозволяє передати помилку далі на рівень валідатора,
-   * який уже сформує відповідь про недопустиму операцію.
-   */
+  // 7. Якщо метод невідомий (наприклад, FETCH або POST, який ми не підтримуємо)
+  // Повертаємо як "unknown", щоб семантичний валідатор заблокував його з правильною 400/403 помилкою.
   return {
     senderCode,
     targetUserCode,
@@ -189,13 +157,13 @@ module.exports = { parseGatewayMessage };</code></pre>
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#ALLOWED_OPERATIONS">ALLOWED_OPERATIONS</a></li><li><a href="global.html#AVAILABLE_SUBJECTS">AVAILABLE_SUBJECTS</a></li><li><a href="global.html#DEFAULT_BACKEND_BASE_URL">DEFAULT_BACKEND_BASE_URL</a></li><li><a href="global.html#EXACT_PROXY_PATHS">EXACT_PROXY_PATHS</a></li><li><a href="global.html#FORBIDDEN_FORWARD_HEADERS">FORBIDDEN_FORWARD_HEADERS</a></li><li><a href="global.html#IGNORED_RESPONSE_HEADERS">IGNORED_RESPONSE_HEADERS</a></li><li><a href="global.html#NO_BODY_METHODS">NO_BODY_METHODS</a></li><li><a href="global.html#PORT">PORT</a></li><li><a href="global.html#PROXY_PREFIXES">PROXY_PREFIXES</a></li><li><a href="global.html#TEMPLATE_PERMISSIONS">TEMPLATE_PERMISSIONS</a></li><li><a href="global.html#app">app</a></li><li><a href="global.html#buildSignaturePayload">buildSignaturePayload</a></li><li><a href="global.html#checkAccess">checkAccess</a></li><li><a href="global.html#detectGatewayTemplate">detectGatewayTemplate</a></li><li><a href="global.html#express">express</a></li><li><a href="global.html#forwardToBackend">forwardToBackend</a></li><li><a href="global.html#generateNonce">generateNonce</a></li><li><a href="global.html#getForwardHeaders">getForwardHeaders</a></li><li><a href="global.html#handleGatewayMessage">handleGatewayMessage</a></li><li><a href="global.html#handleProxyRequest">handleProxyRequest</a></li><li><a href="global.html#isAllowedCategory">isAllowedCategory</a></li><li><a href="global.html#isValidChangeValue">isValidChangeValue</a></li><li><a href="global.html#isValidQueryParams">isValidQueryParams</a></li><li><a href="global.html#isValidTargetField">isValidTargetField</a></li><li><a href="global.html#isValidUserCode">isValidUserCode</a></li><li><a href="global.html#normalizeTemplateType">normalizeTemplateType</a></li><li><a href="global.html#parseGatewayMessage">parseGatewayMessage</a></li><li><a href="global.html#proxyToBackend">proxyToBackend</a></li><li><a href="global.html#readRequestBody">readRequestBody</a></li><li><a href="global.html#resolveBackendBaseUrl">resolveBackendBaseUrl</a></li><li><a href="global.html#resolveBackendUrl">resolveBackendUrl</a></li><li><a href="global.html#router">router</a></li><li><a href="global.html#shouldProxy">shouldProxy</a></li><li><a href="global.html#signPayload">signPayload</a></li><li><a href="global.html#validateBaseMessage">validateBaseMessage</a></li><li><a href="global.html#validateGeneralTemplate">validateGeneralTemplate</a></li><li><a href="global.html#validateRatingTemplate">validateRatingTemplate</a></li><li><a href="global.html#validateTemplateMessage">validateTemplateMessage</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-AccessControlService.html">AccessControlService</a></li><li><a href="module-AppConfig.html">AppConfig</a></li><li><a href="module-BaseValidatorService.html">BaseValidatorService</a></li><li><a href="module-Constants.html">Constants</a></li><li><a href="module-ForwarderService.html">ForwarderService</a></li><li><a href="module-GatewayController.html">GatewayController</a></li><li><a href="module-GatewayRoutes.html">GatewayRoutes</a></li><li><a href="module-LoggerService.html">LoggerService</a></li><li><a href="module-ParserService.html">ParserService</a></li><li><a href="module-ProxyController.html">ProxyController</a></li><li><a href="module-ProxyService.html">ProxyService</a></li><li><a href="module-ServerEntry.html">ServerEntry</a></li><li><a href="module-TemplateDetectorService.html">TemplateDetectorService</a></li><li><a href="module-TemplateValidatorService.html">TemplateValidatorService</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri May 01 2026 17:53:43 GMT+0300 (за східноєвропейським літнім часом)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Jun 03 2026 19:08:14 GMT+0300 (за східноєвропейським літнім часом)
 </footer>
 
 <script> prettyPrint(); </script>

@@ -19,12 +19,15 @@ const express = require("express");
 const gatewayRoutes = require("./routes/gateway.routes");
 const { handleProxyRequest } = require("./controllers/proxy.controller");
 
+const cors = require("cors");
+
 /**
  * Екземпляр Express-застосунку.
  * Через нього підключаються всі middleware, маршрути та контролери шлюзу.
  */
 const app = express();
 
+app.use(cors());
 /**
  * Підключення middleware для маршруту /gateway.
  *

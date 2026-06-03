@@ -8,8 +8,8 @@
  * Обробляє вхідний gateway-запит, виконує всі етапи перевірки та повертає JSON-відповідь.
  *
  * @async
- * @param {import('express').Request} req - Об'єкт HTTP-запиту (тіло у форматі text/plain).
- * @param {import('express').Response} res - Об'єкт HTTP-відповіді.
+ * @param {Object} req - Об'єкт HTTP-запиту Express (тіло у форматі text/plain).
+ * @param {Object} res - Об'єкт HTTP-відповіді Express.
  * @returns {Promise<void>}
  */
 // async function handleGatewayMessage(req, res) { ... }

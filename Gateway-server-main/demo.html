@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Демонстрація Шлюзу: ІС ефект</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+
+    .dashboard-header {
+      background-color: #212529;
+      color: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+
+    .log-terminal {
+      background-color: #1e1e1e;
+      color: #00ff00;
+      padding: 15px;
+      border-radius: 8px;
+      height: 300px;
+      overflow-y: auto;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    .json-key {
+      color: #9cdcfe;
+    }
+
+    .json-string {
+      color: #ce9178;
+    }
+
+    .json-number {
+      color: #b5cea8;
+    }
+
+    .json-boolean {
+      color: #569cd6;
+    }
+  </style>
+</head>
+
+<body class="container py-4">
+
+  <div class="dashboard-header text-center">
+    <h2>Панель тестування: Шлюз захищеної взаємодії</h2>
+    <p class="mb-0">Емуляція клієнтських запитів до системи «ІС ефект»</p>
+  </div>
+
+  <div class="row">
+    <div class="col-md-7">
+      <h4>Тестові сценарії (Розділ 4)</h4>
+
+      <div class="card mb-3 border-success">
+        <div class="card-header bg-success text-white">1. Успішна транзакція (Викладач)</div>
+        <div class="card-body">
+          <p class="mb-1"><strong>Тіло запиту:</strong> <code>L1#U2#PATCH#LANG_JAVA#+10</code></p>
+          <button type="button" id="btn-success" class="btn btn-outline-success w-100">
+            Відправити через Шлюз
+          </button>
+        </div>
+      </div>
+
+      <div class="card mb-3 border-danger">
+        <div class="card-header bg-danger text-white">2. Блокування: Перевищення ліміту (Студент)</div>
+        <div class="card-body">
+          <p class="mb-1"><strong>Тіло запиту:</strong> <code>U1#U2#PATCH#TEAMWORK#+15</code></p>
+          <button type="button" id="btn-limit" class="btn btn-outline-danger w-100">
+            Відправити через Шлюз
+          </button>
+        </div>
+      </div>
+
+      <div class="card mb-3 border-warning">
+        <div class="card-header bg-warning text-dark">3. Блокування: Структурна аномалія</div>
+        <div class="card-body">
+          <p class="mb-1"><strong>Тіло запиту:</strong> <code>U1#U2#PATCH#LANG_JAVA</code></p>
+          <button type="button" id="btn-struct" class="btn btn-outline-warning w-100">
+            Відправити через Шлюз
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-5">
+      <h4>Відповідь від шлюзу</h4>
+      <div id="status-badge" class="alert alert-secondary text-center">Очікування запиту...</div>
+      <pre class="log-terminal" id="json-output">// Тут з'явиться JSON-відповідь сервера</pre>
+    </div>
+  </div>
+
+  <script>
+    function syntaxHighlight(json) {
+      if (typeof json !== 'string') {
+        json = JSON.stringify(json, null, 4);
+      }
+
+      json = json
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+      return json.replace(
+        /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+        function (match) {
+          let cls = 'json-number';
+
+          if (/^"/.test(match)) {
+            cls = /:$/.test(match) ? 'json-key' : 'json-string';
+          } else if (/true|false|null/.test(match)) {
+            cls = 'json-boolean';
+          }
+
+          return '<span class="' + cls + '">' + match + '</span>';
+        }
+      );
+    }
+
+    async function sendRequest(payload, role, userCode) {
+      const statusBadge = document.getElementById('status-badge');
+      const jsonOutput = document.getElementById('json-output');
+
+      statusBadge.className = 'alert alert-info text-center';
+      statusBadge.textContent = 'Відправка...';
+      jsonOutput.textContent = '// Очікування відповіді...';
+
+      try {
+        const response = await fetch('http://localhost:8080/gateway/message', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'text/plain',
+            'x-user-role': role,
+            'x-user-code': userCode
+          },
+          body: payload
+        });
+
+        const textData = await response.text();
+
+        let data;
+        try {
+          data = JSON.parse(textData);
+        } catch {
+          data = {
+            error: 'Сервер повернув не JSON',
+            raw: textData
+          };
+        }
+
+        if (response.ok) {
+          statusBadge.className = 'alert alert-success text-center text-uppercase fw-bold';
+          statusBadge.textContent = `✅ Успіх (${response.status})`;
+        } else {
+          statusBadge.className = 'alert alert-danger text-center text-uppercase fw-bold';
+          statusBadge.textContent = `🛑 Блокування (${response.status})`;
+        }
+
+        jsonOutput.innerHTML = syntaxHighlight(data);
+        console.log('Відображено JSON:', data);
+
+      } catch (error) {
+        statusBadge.className = 'alert alert-dark text-center';
+        statusBadge.textContent = 'Помилка мережі';
+        jsonOutput.innerHTML = `<span class="text-danger">${error.message}</span>`;
+        console.error('Fetch error:', error);
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const form = document.querySelector('form');
+      if (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+        });
+      }
+
+      document.getElementById('btn-success')?.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        sendRequest('L1#U2#PATCH#LANG_JAVA#+10', 'TEACHER', 'L1');
+      });
+
+      document.getElementById('btn-limit')?.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        sendRequest('U1#U2#PATCH#TEAMWORK#+15', 'STUDENT', 'U1');
+      });
+
+      document.getElementById('btn-struct')?.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        sendRequest('U1#U2#PATCH#LANG_JAVA', 'STUDENT', 'U1');
+      });
+    });
+  </script>
+</body>
+
+</html>
