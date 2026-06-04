@@ -9,10 +9,10 @@ app.post('/', (req, res) => {
   const signature = req.get('X-Gateway-Signature');
   const timestamp = req.get('X-Timestamp');
 
-  console.log('\\n✅ [MOCK-BACKEND] Отримано запит від Шлюзу!');
-  console.log(`📦 Тіло запиту: ${req.body}`);
-  console.log(`🔐 Підпис шлюзу: ${signature ? 'ПРИСУТНІЙ' : 'ВІДСУТНІЙ'}`);
-  console.log(`⏱️ Час шлюзу: ${timestamp}`);
+  console.log('\[MOCK-BACKEND] Отримано запит від Шлюзу!');
+  console.log(`Тіло запиту: ${req.body}`);
+  console.log(`Підпис шлюзу: ${signature ? 'ПРИСУТНІЙ' : 'ВІДСУТНІЙ'}`);
+  console.log(`Час шлюзу: ${timestamp}`);
 
   if (!signature) {
     return res.status(401).json({
@@ -31,5 +31,5 @@ app.post('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🖥️ Mock-Бекенд запущено на порту ${PORT}`);
+  console.log(`Mock-Бекенд запущено на порту ${PORT}`);
 });

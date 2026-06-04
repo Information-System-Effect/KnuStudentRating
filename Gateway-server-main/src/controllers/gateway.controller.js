@@ -103,11 +103,10 @@ async function handleGatewayMessage(req, res) {
       parsed, templateInfo, authorization, requestId,
     });
 
+    console.log("СИРІ ДАНІ ВІД БЕКЕНДУ:", backendResult);
+
     logEvent("INFO", "FORWARD_SUCCESS", `Запит [${requestId}] успішно оброблено сервером`);
 
-    if (typeof backendResult.body === "string") {
-      return res.status(backendResult.statusCode).send(backendResult.body);
-    }
     return res.status(backendResult.statusCode).json(backendResult.body);
 
   } catch (error) {
