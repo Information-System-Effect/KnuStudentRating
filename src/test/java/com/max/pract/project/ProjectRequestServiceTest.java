@@ -18,8 +18,11 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,8 +34,6 @@ class ProjectRequestServiceTest {
     private ProjectRepository projectRepository;
     @Mock
     private AppUserRepository appUserRepository;
-    @Mock
-    private ProjectService projectService;
 
     @InjectMocks
     private ProjectRequestService projectRequestService;
@@ -74,5 +75,29 @@ class ProjectRequestServiceTest {
         request.setDescription("Should be rejected");
 
         assertThrows(ApiForbiddenException.class, () -> projectRequestService.create(7L, request));
+    }
+
+    @Test
+    void approveDoesNotCreateProjectAutomatically() {
+        AppUser admin = new AppUser();
+        ReflectionTestUtils.setField(admin, "id", 9L);
+        admin.setRole(AppRole.ADMIN);
+
+        ProjectRequestEntity projectRequest = new ProjectRequestEntity();
+        ReflectionTestUtils.setField(projectRequest, "id", 33L);
+        projectRequest.setStatus(ProjectRequestStatus.PENDING);
+        projectRequest.setAuthorUserId(42L);
+        projectRequest.setTitle("Approved later");
+
+        when(appUserRepository.findById(9L)).thenReturn(Optional.of(admin));
+        when(projectRequestRepository.findById(33L)).thenReturn(Optional.of(projectRequest));
+        when(projectRequestRepository.save(any(ProjectRequestEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(projectRepository.findByCreatedFromRequestId(33L)).thenReturn(Optional.empty());
+
+        var response = projectRequestService.approve(33L, 9L, "Ready for project setup");
+
+        assertEquals("APPROVED", response.status());
+        assertNull(response.createdProjectId());
+        verify(projectRepository, never()).existsByCreatedFromRequestId(33L);
     }
 }

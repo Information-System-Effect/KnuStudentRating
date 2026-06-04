@@ -1,6 +1,13 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import Breadcrumbs from "../components/Breadcrumbs";
+import CreateProjectFromRequestModal from "../components/CreateProjectFromRequestModal";
+import EmptyState from "../components/EmptyState";
+import LoadingState from "../components/LoadingState";
+import MemberPicker from "../components/MemberPicker";
+import { useToast } from "../components/ToastProvider";
+import { getErrorMessage } from "../lib/errors";
 import {
   formatDateTime,
   formatProjectStatus,
@@ -89,30 +96,9 @@ function statusClass(status) {
   return `status-pill status-pill-${normalized}`;
 }
 
-function normalizeSearchToken(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
-function filterPickerUsers(users, selectedIds, query) {
-  const selectedSet = new Set(selectedIds || []);
-  const needle = normalizeSearchToken(query);
-
-  const filtered = users.filter((user) => {
-    if (selectedSet.has(user.userId)) {
-      return false;
-    }
-    if (!needle) {
-      return true;
-    }
-    const haystack = `${user.fullName || ""} ${user.code || ""} ${user.email || ""}`.toLowerCase();
-    return haystack.includes(needle);
-  });
-
-  return filtered.slice(0, 12);
-}
-
 export default function AdminConsolePage() {
   const { api, authApi } = useAuth();
+  const toast = useToast();
 
   const [stats, setStats] = useState(null);
   const [requests, setRequests] = useState([]);
@@ -127,19 +113,17 @@ export default function AdminConsolePage() {
 
   const [teacherForm, setTeacherForm] = useState(createTeacherForm);
   const [projectCreateForm, setProjectCreateForm] = useState(createProjectForm);
-  const [projectStudentQuery, setProjectStudentQuery] = useState("");
-  const [projectTeacherQuery, setProjectTeacherQuery] = useState("");
 
   const [requestFilter, setRequestFilter] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [userFilter, setUserFilter] = useState("");
 
   const [isLoading, setIsLoading] = useState(true);
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const [moderatingRequestId, setModeratingRequestId] = useState(null);
   const [creatingProjectRequestId, setCreatingProjectRequestId] = useState(null);
+  const [projectCreationRequest, setProjectCreationRequest] = useState(null);
   const [savingLifecycleProjectId, setSavingLifecycleProjectId] = useState(null);
   const [upsertingMemberProjectId, setUpsertingMemberProjectId] = useState(null);
   const [removingMemberKey, setRemovingMemberKey] = useState("");
@@ -193,7 +177,7 @@ export default function AdminConsolePage() {
         return next;
       });
     } catch (loadError) {
-      setError(loadError.message);
+      setError(getErrorMessage(loadError, "Не вдалося завантажити дані панелі адміністрування."));
     } finally {
       setIsLoading(false);
     }
@@ -242,36 +226,6 @@ export default function AdminConsolePage() {
     });
   }, [userFilter, users]);
 
-  const studentUsers = useMemo(
-    () => users.filter((user) => String(user.role || "").toUpperCase() === "STUDENT"),
-    [users],
-  );
-
-  const teacherUsers = useMemo(
-    () => users.filter((user) => ["TEACHER", "ADMIN"].includes(String(user.role || "").toUpperCase())),
-    [users],
-  );
-
-  const selectedStudentUsers = useMemo(() => {
-    const selectedSet = new Set(projectCreateForm.studentIds || []);
-    return studentUsers.filter((user) => selectedSet.has(user.userId));
-  }, [projectCreateForm.studentIds, studentUsers]);
-
-  const selectedTeacherUsers = useMemo(() => {
-    const selectedSet = new Set(projectCreateForm.teacherIds || []);
-    return teacherUsers.filter((user) => selectedSet.has(user.userId));
-  }, [projectCreateForm.teacherIds, teacherUsers]);
-
-  const studentPickerSuggestions = useMemo(
-    () => filterPickerUsers(studentUsers, projectCreateForm.studentIds, projectStudentQuery),
-    [projectCreateForm.studentIds, projectStudentQuery, studentUsers],
-  );
-
-  const teacherPickerSuggestions = useMemo(
-    () => filterPickerUsers(teacherUsers, projectCreateForm.teacherIds, projectTeacherQuery),
-    [projectCreateForm.teacherIds, projectTeacherQuery, teacherUsers],
-  );
-
   const activeProjectsCount = useMemo(() => projects.filter((project) => project.status === "ACTIVE").length, [projects]);
   const completedProjectsCount = useMemo(() => projects.filter((project) => project.status === "COMPLETED").length, [projects]);
   const pendingRequestsCount = useMemo(() => requests.filter((request) => request.status === "PENDING").length, [requests]);
@@ -280,9 +234,12 @@ export default function AdminConsolePage() {
     [requests],
   );
 
-  function resetNotice() {
-    setMessage("");
+  function clearLoadError() {
     setError("");
+  }
+
+  function showActionError(title, actionError, fallback) {
+    toast.error(title, getErrorMessage(actionError, fallback));
   }
 
   function updateRequestComment(requestId, value) {
@@ -323,35 +280,8 @@ export default function AdminConsolePage() {
     setProjectCreateForm((current) => ({ ...current, [name]: value }));
   }
 
-  function addProjectCreateUser(kind, userId) {
-    const key = kind === "student" ? "studentIds" : "teacherIds";
-    setProjectCreateForm((current) => {
-      const currentIds = current[key] || [];
-      if (currentIds.includes(userId)) {
-        return current;
-      }
-      return {
-        ...current,
-        [key]: [...currentIds, userId],
-      };
-    });
-    if (kind === "student") {
-      setProjectStudentQuery("");
-    } else {
-      setProjectTeacherQuery("");
-    }
-  }
-
-  function removeProjectCreateUser(kind, userId) {
-    const key = kind === "student" ? "studentIds" : "teacherIds";
-    setProjectCreateForm((current) => ({
-      ...current,
-      [key]: (current[key] || []).filter((id) => id !== userId),
-    }));
-  }
-
   async function moderateRequest(request, action) {
-    resetNotice();
+    clearLoadError();
     setModeratingRequestId(request.id);
 
     try {
@@ -362,40 +292,54 @@ export default function AdminConsolePage() {
         },
       });
 
-      if (action === "approve" && updated?.createdProjectId) {
-        setMessage(`Заявку #${request.id} схвалено. Проєкт створено автоматично (ID: ${updated.createdProjectId}).`);
+      if (action === "approve") {
+        toast.success(
+          "Заявку схвалено",
+          updated?.createdProjectId
+            ? `Проєкт уже прив'язано до заявки (ID: ${updated.createdProjectId}).`
+            : "Тепер можна створити проєкт і відразу додати студентів та менторів.",
+        );
       } else {
-        setMessage(`Заявку #${request.id} опрацьовано.`);
+        toast.info("Заявку відхилено", "Статус і коментар модерації збережено.");
       }
+
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        action === "approve" ? "Не вдалося схвалити заявку" : "Не вдалося відхилити заявку",
+        submitError,
+        "Спробуйте повторити дію ще раз.",
+      );
     } finally {
       setModeratingRequestId(null);
     }
   }
 
-  async function createProjectForApprovedRequest(request) {
-    resetNotice();
-    setCreatingProjectRequestId(request.id);
+  async function createProjectForApprovedRequest(payload) {
+    if (!projectCreationRequest) {
+      return;
+    }
+
+    clearLoadError();
+    setCreatingProjectRequestId(projectCreationRequest.id);
 
     try {
-      const created = await authApi(`/api/admin/projects/from-request/${encodeURIComponent(request.id)}`, {
+      const created = await authApi(`/api/admin/projects/from-request/${encodeURIComponent(projectCreationRequest.id)}`, {
         method: "POST",
-        body: {
-          title: request.title,
-          description: request.description || "",
-          startAt: null,
-          studentIds: [],
-          teacherIds: [],
-          studentCodes: [],
-          teacherCodes: [],
-        },
+        body: payload,
       });
-      setMessage(`Проєкт створено для заявки #${request.id} (ID: ${created.id}).`);
+      toast.success(
+        "Проєкт створено",
+        `Проєкт #${created.id} створено із заявки #${projectCreationRequest.id}.`,
+      );
+      setProjectCreationRequest(null);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося створити проєкт",
+        submitError,
+        "Перевірте склад команди і повторіть спробу.",
+      );
     } finally {
       setCreatingProjectRequestId(null);
     }
@@ -403,7 +347,7 @@ export default function AdminConsolePage() {
 
   async function createProjectFromAdmin(event) {
     event.preventDefault();
-    resetNotice();
+    clearLoadError();
     setCreatingProjectDirect(true);
 
     try {
@@ -416,13 +360,15 @@ export default function AdminConsolePage() {
           teacherIds: projectCreateForm.teacherIds,
         },
       });
-      setMessage(`Проєкт створено (ID: ${created.id}).`);
+      toast.success("Проєкт створено", `Новий проєкт #${created.id} додано до системи.`);
       setProjectCreateForm(createProjectForm());
-      setProjectStudentQuery("");
-      setProjectTeacherQuery("");
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося створити проєкт",
+        submitError,
+        "Перевірте форму і повторіть спробу.",
+      );
     } finally {
       setCreatingProjectDirect(false);
     }
@@ -433,17 +379,21 @@ export default function AdminConsolePage() {
       return;
     }
 
-    resetNotice();
+    clearLoadError();
     setDeletingProjectId(project.id);
 
     try {
       const result = await authApi(`/api/admin/projects/${encodeURIComponent(project.id)}`, {
         method: "DELETE",
       });
-      setMessage(result || `Операцію для проєкту #${project.id} виконано.`);
+      toast.success("Операцію виконано", result || `Проєкт #${project.id} опрацьовано.`);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося видалити проєкт",
+        submitError,
+        "Спробуйте виконати цю дію пізніше.",
+      );
     } finally {
       setDeletingProjectId(null);
     }
@@ -458,17 +408,21 @@ export default function AdminConsolePage() {
       return;
     }
 
-    resetNotice();
+    clearLoadError();
     setPurgingProjectId(project.id);
 
     try {
       const result = await authApi(`/api/admin/projects/${encodeURIComponent(project.id)}/purge`, {
         method: "DELETE",
       });
-      setMessage(result || `Проєкт #${project.id} видалено безповоротно.`);
+      toast.success("Проєкт видалено", result || `Проєкт #${project.id} знищено безповоротно.`);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося видалити проєкт безповоротно",
+        submitError,
+        "Спробуйте повторити дію ще раз.",
+      );
     } finally {
       setPurgingProjectId(null);
     }
@@ -479,24 +433,28 @@ export default function AdminConsolePage() {
       return;
     }
 
-    resetNotice();
+    clearLoadError();
     setDeletingRequestId(request.id);
 
     try {
       await authApi(`/api/admin/project-requests/${encodeURIComponent(request.id)}`, {
         method: "DELETE",
       });
-      setMessage(`Заявку #${request.id} видалено.`);
+      toast.success("Заявку видалено", `Заявку #${request.id} видалено з черги.`);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося видалити заявку",
+        submitError,
+        "Спробуйте повторити дію пізніше.",
+      );
     } finally {
       setDeletingRequestId(null);
     }
   }
 
   async function saveLifecycle(project, payload, successText) {
-    resetNotice();
+    clearLoadError();
     setSavingLifecycleProjectId(project.id);
 
     try {
@@ -504,10 +462,14 @@ export default function AdminConsolePage() {
         method: "PUT",
         body: payload,
       });
-      setMessage(successText);
+      toast.success("Життєвий цикл оновлено", successText);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося оновити життєвий цикл",
+        submitError,
+        "Перевірте введені дати та статус.",
+      );
     } finally {
       setSavingLifecycleProjectId(null);
     }
@@ -523,7 +485,7 @@ export default function AdminConsolePage() {
         status: draft.status,
         endAt: draft.endAt || null,
       },
-      `Параметри проєкту #${project.id} оновлено.`,
+      `Параметри проєкту #${project.id} збережено.`,
     );
   }
 
@@ -549,22 +511,23 @@ export default function AdminConsolePage() {
         status: "COMPLETED",
         endAt,
       },
-      `Проєкт #${project.id} завершено. Вікно оцінювання активне 24 години.`,
+      `Проєкт #${project.id} завершено. Вікно оцінювання відкрите ще на 24 години.`,
     );
   }
 
   async function upsertProjectMember(project) {
-    resetNotice();
+    clearLoadError();
+    const draft = memberDrafts[project.id] || { userId: "", memberRole: "STUDENT" };
+    const parsedUserId = Number(draft.userId);
+
+    if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
+      toast.error("Не вибрано учасника", "Оберіть користувача для додавання або оновлення ролі в проєкті.");
+      return;
+    }
+
     setUpsertingMemberProjectId(project.id);
 
     try {
-      const draft = memberDrafts[project.id] || { userId: "", memberRole: "STUDENT" };
-      const parsedUserId = Number(draft.userId);
-      if (!Number.isFinite(parsedUserId) || parsedUserId <= 0) {
-        setError("Оберіть користувача для додавання в проєкт.");
-        return;
-      }
-
       await authApi(`/api/admin/projects/${encodeURIComponent(project.id)}/members`, {
         method: "PUT",
         body: {
@@ -572,17 +535,21 @@ export default function AdminConsolePage() {
           memberRole: draft.memberRole,
         },
       });
-      setMessage(`Склад проєкту #${project.id} оновлено.`);
+      toast.success("Склад проєкту оновлено", `Учасників проєкту #${project.id} синхронізовано.`);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося оновити склад проєкту",
+        submitError,
+        "Перевірте роль користувача і повторіть спробу.",
+      );
     } finally {
       setUpsertingMemberProjectId(null);
     }
   }
 
   async function removeProjectMember(projectId, userId) {
-    resetNotice();
+    clearLoadError();
     const key = `${projectId}:${userId}`;
     setRemovingMemberKey(key);
 
@@ -590,17 +557,21 @@ export default function AdminConsolePage() {
       await authApi(`/api/admin/projects/${encodeURIComponent(projectId)}/members/${encodeURIComponent(userId)}`, {
         method: "DELETE",
       });
-      setMessage(`Учасника видалено з проєкту #${projectId}.`);
+      toast.success("Учасника видалено", `Користувача прибрано з проєкту #${projectId}.`);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося видалити учасника",
+        submitError,
+        "Спробуйте повторити дію ще раз.",
+      );
     } finally {
       setRemovingMemberKey("");
     }
   }
 
   async function saveUserRole(user) {
-    resetNotice();
+    clearLoadError();
     setSavingRoleUserId(user.userId);
 
     try {
@@ -610,10 +581,14 @@ export default function AdminConsolePage() {
           role: roleDrafts[user.userId],
         },
       });
-      setMessage(`Роль користувача ${user.code} оновлено.`);
+      toast.success("Роль оновлено", `Роль користувача ${user.code} змінено.`);
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося оновити роль",
+        submitError,
+        "Спробуйте зберегти зміни пізніше.",
+      );
     } finally {
       setSavingRoleUserId(null);
     }
@@ -621,7 +596,7 @@ export default function AdminConsolePage() {
 
   async function createTeacherAccount(event) {
     event.preventDefault();
-    resetNotice();
+    clearLoadError();
     setCreatingTeacher(true);
 
     try {
@@ -636,11 +611,15 @@ export default function AdminConsolePage() {
           about: teacherForm.about.trim(),
         },
       });
-      setMessage("Акаунт викладача створено.");
+      toast.success("Акаунт створено", "Новий обліковий запис викладача готовий до використання.");
       setTeacherForm(createTeacherForm());
       await loadAdminData();
     } catch (submitError) {
-      setError(submitError.message);
+      showActionError(
+        "Не вдалося створити акаунт викладача",
+        submitError,
+        "Перевірте форму реєстрації та повторіть спробу.",
+      );
     } finally {
       setCreatingTeacher(false);
     }
@@ -648,6 +627,13 @@ export default function AdminConsolePage() {
 
   return (
     <div className="page-stack admin-console-page">
+      <Breadcrumbs
+        items={[
+          { to: "/", label: "Головна" },
+          { label: "Адміністрування" },
+        ]}
+      />
+
       <section className="page-hero">
         <div>
           <p className="hero-kicker">Центр керування</p>
@@ -669,7 +655,6 @@ export default function AdminConsolePage() {
         </div>
       </section>
 
-      {message ? <div className="message message-success">{message}</div> : null}
       {error ? (
         <section className="home-error-alert" role="alert">
           <span className="alert-icon" aria-hidden="true" />
@@ -684,7 +669,13 @@ export default function AdminConsolePage() {
         </section>
       ) : null}
 
-      {isLoading ? <section className="empty-state">Завантаження даних панелі адміністрування...</section> : null}
+      {isLoading ? (
+        <LoadingState
+          title="Завантаження адмін-панелі"
+          description="Підтягуємо заявки, проєкти, користувачів та ролі."
+          cards={4}
+        />
+      ) : null}
 
       <section className="admin-kpi-grid">
         <article className="panel admin-kpi-card">
@@ -728,92 +719,105 @@ export default function AdminConsolePage() {
           />
         </div>
 
-        {!filteredRequests.length ? <div className="empty-state">Заявок за фільтром не знайдено.</div> : null}
-        <div className="list-stack">
-          {filteredRequests.map((request) => {
-            const isModerating = moderatingRequestId === request.id;
-            const isCreatingProject = creatingProjectRequestId === request.id;
-            const isDeletingRequest = deletingRequestId === request.id;
-            const canModerate = request.status === "PENDING";
-            const canCreateMissingProject = request.status === "APPROVED" && !request.createdProjectId;
+        {!filteredRequests.length ? (
+          <EmptyState
+            title="Заявок за фільтром не знайдено"
+            description="Спробуйте змінити пошуковий запит або дочекайтеся нових ідей від користувачів."
+          />
+        ) : (
+          <div className="list-stack">
+            {filteredRequests.map((request) => {
+              const isModerating = moderatingRequestId === request.id;
+              const isCreatingProject = creatingProjectRequestId === request.id;
+              const isDeletingRequest = deletingRequestId === request.id;
+              const canModerate = request.status === "PENDING";
+              const canCreateMissingProject = request.status === "APPROVED" && !request.createdProjectId;
 
-            return (
-              <article key={request.id} className="list-card admin-work-card">
-                <div className="admin-row-head">
-                  <h3>
-                    {request.title} <span className="mono">#{request.id}</span>
-                  </h3>
-                  <span className={statusClass(request.status)}>{formatRequestStatus(request.status)}</span>
-                </div>
+              return (
+                <article key={request.id} className="list-card admin-work-card request-card-emphasis">
+                  <div className="admin-row-head">
+                    <h3>
+                      {request.title} <span className="mono">#{request.id}</span>
+                    </h3>
+                    <span className={statusClass(request.status)}>{formatRequestStatus(request.status)}</span>
+                  </div>
 
-                <p>{request.description || "Без опису."}</p>
-                <div className="meta-grid">
-                  <span>Автор ID <strong>{request.authorUserId}</strong></span>
-                  <span>Створено <strong>{formatDateTime(request.createdAt)}</strong></span>
-                  <span>Розглянуто <strong>{formatDateTime(request.reviewedAt)}</strong></span>
-                </div>
+                  <p>{request.description || "Без опису."}</p>
+                  <div className="meta-grid">
+                    <span>Автор ID <strong>{request.authorUserId}</strong></span>
+                    <span>Створено <strong>{formatDateTime(request.createdAt)}</strong></span>
+                    <span>Розглянуто <strong>{formatDateTime(request.reviewedAt)}</strong></span>
+                  </div>
 
-                {request.createdProjectId ? (
-                  <p className="muted">
-                    Проєкт: <span className="mono">#{request.createdProjectId}</span>
-                  </p>
-                ) : null}
+                  {request.createdProjectId ? (
+                    <p className="muted">
+                      Проєкт: <span className="mono">#{request.createdProjectId}</span>
+                    </p>
+                  ) : null}
 
-                <label className="field">
-                  <span>Коментар модерації</span>
-                  <textarea
-                    rows={2}
-                    value={requestComments[request.id] || ""}
-                    onChange={(event) => updateRequestComment(request.id, event.target.value)}
-                    placeholder="Необов'язковий коментар"
-                  />
-                </label>
+                  {request.status === "APPROVED" && !request.createdProjectId ? (
+                    <p className="inline-insight">
+                      <span>Наступний крок</span>
+                      <strong>Створіть проєкт і відразу додайте учасників команди через модальне вікно.</strong>
+                    </p>
+                  ) : null}
 
-                <div className="toolbar">
-                  <button
-                    type="button"
-                    className="button button-primary"
-                    onClick={() => moderateRequest(request, "approve")}
-                    disabled={!canModerate || isModerating || isCreatingProject || isDeletingRequest}
-                  >
-                    {isModerating ? "Обробка..." : "Схвалити"}
-                  </button>
-                  <button
-                    type="button"
-                    className="button button-soft"
-                    onClick={() => moderateRequest(request, "reject")}
-                    disabled={!canModerate || isModerating || isCreatingProject || isDeletingRequest}
-                  >
-                    Відхилити
-                  </button>
-                  {canCreateMissingProject ? (
+                  <label className="field">
+                    <span>Коментар модерації</span>
+                    <textarea
+                      rows={2}
+                      value={requestComments[request.id] || ""}
+                      onChange={(event) => updateRequestComment(request.id, event.target.value)}
+                      placeholder="Необов'язковий коментар"
+                    />
+                  </label>
+
+                  <div className="toolbar">
+                    <button
+                      type="button"
+                      className="button button-primary"
+                      onClick={() => moderateRequest(request, "approve")}
+                      disabled={!canModerate || isModerating || isCreatingProject || isDeletingRequest}
+                    >
+                      {isModerating ? "Обробка..." : "Схвалити"}
+                    </button>
                     <button
                       type="button"
                       className="button button-soft"
-                      onClick={() => createProjectForApprovedRequest(request)}
-                      disabled={isCreatingProject || isModerating || isDeletingRequest}
+                      onClick={() => moderateRequest(request, "reject")}
+                      disabled={!canModerate || isModerating || isCreatingProject || isDeletingRequest}
                     >
-                      {isCreatingProject ? "Створення..." : "Створити проєкт"}
+                      Відхилити
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="button button-danger"
-                    onClick={() => deleteRequest(request)}
-                    disabled={isDeletingRequest || isModerating || isCreatingProject}
-                  >
-                    {isDeletingRequest ? "Видалення..." : "Видалити заявку"}
-                  </button>
-                  {request.createdProjectId ? (
-                    <Link to="/site/projects/completed" className="button button-soft">
-                      До проєктів
-                    </Link>
-                  ) : null}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                    {canCreateMissingProject ? (
+                      <button
+                        type="button"
+                        className="button button-primary"
+                        onClick={() => setProjectCreationRequest(request)}
+                        disabled={isCreatingProject || isModerating || isDeletingRequest}
+                      >
+                        {isCreatingProject ? "Створення..." : "Створити проєкт"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="button button-danger"
+                      onClick={() => deleteRequest(request)}
+                      disabled={isDeletingRequest || isModerating || isCreatingProject}
+                    >
+                      {isDeletingRequest ? "Видалення..." : "Видалити заявку"}
+                    </button>
+                    {request.createdProjectId ? (
+                      <Link to="/site/projects/completed" className="button button-soft">
+                        До проєктів
+                      </Link>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="panel admin-board" id="admin-projects">
@@ -845,6 +849,7 @@ export default function AdminConsolePage() {
                 maxLength={255}
               />
             </label>
+
             <label className="field field-wide">
               <span>Опис</span>
               <textarea
@@ -855,101 +860,35 @@ export default function AdminConsolePage() {
                 maxLength={4000}
               />
             </label>
-            <label className="field">
-              <span>Студенти</span>
-              <input
-                type="search"
-                value={projectStudentQuery}
-                onChange={(event) => setProjectStudentQuery(event.target.value)}
-                placeholder="Введіть ім'я, код або електронну адресу студента"
+
+            <div className="field field-wide member-picker-grid">
+              <MemberPicker
+                label="Студенти"
+                users={users}
+                selectedIds={projectCreateForm.studentIds}
+                onChange={(studentIds) => setProjectCreateForm((current) => ({ ...current, studentIds }))}
+                audience="student"
+                placeholder="Пошук студента за іменем, кодом або email"
+                helperText="Додайте студентів, які вже сформували команду для нового проєкту."
+                emptySelectedTitle="Студентів ще не додано"
+                emptySelectedDescription="Проєкт можна створити й без студентів, якщо команда формуватиметься пізніше."
+                disabled={creatingProjectDirect}
               />
-              {projectStudentQuery.trim() ? (
-                <div className="picker-menu">
-                  {!studentPickerSuggestions.length ? <p className="muted">Результатів не знайдено.</p> : null}
-                  {studentPickerSuggestions.map((user) => (
-                    <button
-                      key={`student-pick-${user.userId}`}
-                      type="button"
-                      className="picker-option"
-                      onClick={() => addProjectCreateUser("student", user.userId)}
-                    >
-                      <span>{user.fullName}</span>
-                      <span className="mono">
-                        {user.code} | {user.email}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="muted">Введіть частину імені, коду або електронної адреси для пошуку.</p>
-              )}
-              <div className="picker-selected">
-                {!selectedStudentUsers.length ? <p className="muted">Студентів ще не додано.</p> : null}
-                {selectedStudentUsers.map((user) => (
-                  <div key={`student-selected-${user.userId}`} className="picker-chip">
-                    <span>
-                      {user.fullName} ({user.code})
-                    </span>
-                    <button
-                      type="button"
-                      className="picker-chip-remove"
-                      onClick={() => removeProjectCreateUser("student", user.userId)}
-                    >
-                      Видалити
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </label>
-            <label className="field">
-              <span>Викладачі / ментори</span>
-              <input
-                type="search"
-                value={projectTeacherQuery}
-                onChange={(event) => setProjectTeacherQuery(event.target.value)}
-                placeholder="Введіть ім'я, код або електронну адресу викладача"
+              <MemberPicker
+                label="Викладачі / ментори"
+                users={users}
+                selectedIds={projectCreateForm.teacherIds}
+                onChange={(teacherIds) => setProjectCreateForm((current) => ({ ...current, teacherIds }))}
+                audience="teacher"
+                placeholder="Пошук викладача за іменем, кодом або email"
+                helperText="Можна додати викладачів і адміністраторів, які будуть менторити проєкт."
+                emptySelectedTitle="Менторів ще не додано"
+                emptySelectedDescription="За потреби менторів можна призначити пізніше через картку проєкту."
+                disabled={creatingProjectDirect}
               />
-              {projectTeacherQuery.trim() ? (
-                <div className="picker-menu">
-                  {!teacherPickerSuggestions.length ? <p className="muted">Результатів не знайдено.</p> : null}
-                  {teacherPickerSuggestions.map((user) => (
-                    <button
-                      key={`teacher-pick-${user.userId}`}
-                      type="button"
-                      className="picker-option"
-                      onClick={() => addProjectCreateUser("teacher", user.userId)}
-                    >
-                      <span>
-                        {user.fullName} ({formatRoleLabel(user.role)})
-                      </span>
-                      <span className="mono">
-                        {user.code} | {user.email}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className="muted">Введіть частину імені, коду або електронної адреси для пошуку.</p>
-              )}
-              <div className="picker-selected">
-                {!selectedTeacherUsers.length ? <p className="muted">Викладачів або менторів ще не додано.</p> : null}
-                {selectedTeacherUsers.map((user) => (
-                  <div key={`teacher-selected-${user.userId}`} className="picker-chip">
-                    <span>
-                      {user.fullName} ({user.code})
-                    </span>
-                    <button
-                      type="button"
-                      className="picker-chip-remove"
-                      onClick={() => removeProjectCreateUser("teacher", user.userId)}
-                    >
-                      Видалити
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </label>
-            <div className="toolbar align-end">
+            </div>
+
+            <div className="toolbar align-end field-wide">
               <button type="submit" className="button button-primary" disabled={creatingProjectDirect}>
                 {creatingProjectDirect ? "Створення..." : "Створити проєкт"}
               </button>
@@ -957,167 +896,178 @@ export default function AdminConsolePage() {
           </form>
         </section>
 
-        {!filteredProjects.length ? <div className="empty-state">Проєктів за фільтром не знайдено.</div> : null}
+        {!filteredProjects.length ? (
+          <EmptyState
+            title="Проєктів за фільтром не знайдено"
+            description="Спробуйте інший пошуковий запит або створіть новий проєкт вручну."
+          />
+        ) : (
+          <div className="list-stack">
+            {filteredProjects.map((project) => {
+              const draft = resolveLifecycleDraft(project, lifecycleDrafts[project.id]);
+              const memberDraft = memberDrafts[project.id] || { userId: "", memberRole: "STUDENT" };
+              const lifecycleSaving = savingLifecycleProjectId === project.id;
+              const memberSaving = upsertingMemberProjectId === project.id;
+              const deletingProject = deletingProjectId === project.id;
+              const purgingProject = purgingProjectId === project.id;
+              const isCompleted = project.status === "COMPLETED";
 
-        <div className="list-stack">
-          {filteredProjects.map((project) => {
-            const draft = resolveLifecycleDraft(project, lifecycleDrafts[project.id]);
-            const memberDraft = memberDrafts[project.id] || { userId: "", memberRole: "STUDENT" };
-            const lifecycleSaving = savingLifecycleProjectId === project.id;
-            const memberSaving = upsertingMemberProjectId === project.id;
-            const deletingProject = deletingProjectId === project.id;
-            const purgingProject = purgingProjectId === project.id;
-            const isCompleted = project.status === "COMPLETED";
+              return (
+                <article key={project.id} className="list-card admin-work-card">
+                  <div className="admin-row-head">
+                    <h3>
+                      {project.title} <span className="mono">#{project.id}</span>
+                    </h3>
+                    <span className={statusClass(project.status)}>{formatProjectStatus(project.status)}</span>
+                  </div>
 
-            return (
-              <article key={project.id} className="list-card admin-work-card">
-                <div className="admin-row-head">
-                  <h3>
-                    {project.title} <span className="mono">#{project.id}</span>
-                  </h3>
-                  <span className={statusClass(project.status)}>{formatProjectStatus(project.status)}</span>
-                </div>
+                  <p>{project.description || "Без опису."}</p>
+                  <div className="meta-grid">
+                    <span>Початок <strong>{formatDateTime(project.startAt)}</strong></span>
+                    <span>Завершення <strong>{formatDateTime(project.endAt)}</strong></span>
+                    <span>Оцінювання до <strong>{formatDateTime(project.feedbackDeadlineAt)}</strong></span>
+                  </div>
 
-                <p>{project.description || "Без опису."}</p>
-                <div className="meta-grid">
-                  <span>Початок <strong>{formatDateTime(project.startAt)}</strong></span>
-                  <span>Завершення <strong>{formatDateTime(project.endAt)}</strong></span>
-                  <span>Оцінювання до <strong>{formatDateTime(project.feedbackDeadlineAt)}</strong></span>
-                </div>
+                  <form className="form-grid three-col" onSubmit={(event) => submitLifecycle(project, event)}>
+                    <label className="field">
+                      <span>Статус</span>
+                      <select
+                        value={draft.status}
+                        onChange={(event) => updateLifecycleDraft(project, "status", event.target.value)}
+                        disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                      >
+                        <option value="ACTIVE">Активний</option>
+                        <option value="COMPLETED">Завершений</option>
+                        <option value="ARCHIVED">Архів</option>
+                      </select>
+                    </label>
 
-                <form className="form-grid three-col" onSubmit={(event) => submitLifecycle(project, event)}>
-                  <label className="field">
-                    <span>Статус</span>
-                    <select
-                      value={draft.status}
-                      onChange={(event) => updateLifecycleDraft(project, "status", event.target.value)}
-                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
-                    >
-                      <option value="ACTIVE">Активний</option>
-                      <option value="COMPLETED">Завершений</option>
-                      <option value="ARCHIVED">Архів</option>
-                    </select>
-                  </label>
+                    <label className="field">
+                      <span>Дата завершення проєкту</span>
+                      <input
+                        type="datetime-local"
+                        value={draft.endAt}
+                        onChange={(event) => updateLifecycleDraft(project, "endAt", event.target.value)}
+                        disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                      />
+                    </label>
 
-                  <label className="field">
-                    <span>Дата завершення проєкту</span>
-                    <input
-                      type="datetime-local"
-                      value={draft.endAt}
-                      onChange={(event) => updateLifecycleDraft(project, "endAt", event.target.value)}
-                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
-                    />
-                  </label>
-
-                  <div className="toolbar field-wide">
-                    <button
-                      type="submit"
-                      className="button button-primary"
-                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
-                    >
-                      {lifecycleSaving ? "Збереження..." : "Зберегти"}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button-soft"
-                      onClick={() => quickCompleteProject(project)}
-                      disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
-                    >
-                      {isCompleted ? "Проєкт уже завершено" : "Завершити негайно (+24 год)"}
-                    </button>
-                    <button
-                      type="button"
-                      className="button button-danger"
-                      onClick={() => deleteProject(project)}
-                      disabled={lifecycleSaving || memberSaving || deletingProject || purgingProject}
-                    >
-                      {deletingProject ? "Видалення..." : "Видалити проєкт"}
-                    </button>
-                    {project.status === "ARCHIVED" ? (
+                    <div className="toolbar field-wide">
+                      <button
+                        type="submit"
+                        className="button button-primary"
+                        disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                      >
+                        {lifecycleSaving ? "Збереження..." : "Зберегти"}
+                      </button>
+                      <button
+                        type="button"
+                        className="button button-soft"
+                        onClick={() => quickCompleteProject(project)}
+                        disabled={isCompleted || lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                      >
+                        {isCompleted ? "Проєкт уже завершено" : "Завершити негайно (+24 год)"}
+                      </button>
                       <button
                         type="button"
                         className="button button-danger"
-                        onClick={() => purgeProject(project)}
+                        onClick={() => deleteProject(project)}
                         disabled={lifecycleSaving || memberSaving || deletingProject || purgingProject}
                       >
-                        {purgingProject ? "Знищення..." : "Видалити безповоротно"}
+                        {deletingProject ? "Видалення..." : "Видалити проєкт"}
                       </button>
+                      {project.status === "ARCHIVED" ? (
+                        <button
+                          type="button"
+                          className="button button-danger"
+                          onClick={() => purgeProject(project)}
+                          disabled={lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                        >
+                          {purgingProject ? "Знищення..." : "Видалити безповоротно"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </form>
+
+                  <div className="admin-members">
+                    <h4 className="panel-title">Учасники</h4>
+                    {!project.members?.length ? (
+                      <EmptyState
+                        compact
+                        title="У проєкті поки немає учасників"
+                        description="Додайте студентів, власника або ментора нижче, щоб відкрити командну роботу."
+                      />
                     ) : null}
-                  </div>
-                </form>
 
-                <div className="admin-members">
-                  <h4 className="panel-title">Учасники</h4>
-                  {!project.members?.length ? <p className="muted">У проєкті ще немає учасників.</p> : null}
+                    <div className="chip-row">
+                      {(project.members || []).map((member) => {
+                        const removeKey = `${project.id}:${member.userId}`;
+                        const removing = removingMemberKey === removeKey;
+                        return (
+                          <div key={removeKey} className="admin-member-chip">
+                            <Link to={profileLink(member.userCode)} className="chip-link">
+                              {member.fullName} <span className="mono">{member.userCode}</span> {formatMemberRole(member.memberRole)}
+                            </Link>
+                            <button
+                              type="button"
+                              className="button button-soft"
+                              onClick={() => removeProjectMember(project.id, member.userId)}
+                              disabled={removing || lifecycleSaving || memberSaving || deletingProject || purgingProject}
+                            >
+                              {removing ? "..." : "Видалити"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                  <div className="chip-row">
-                    {(project.members || []).map((member) => {
-                      const removeKey = `${project.id}:${member.userId}`;
-                      const removing = removingMemberKey === removeKey;
-                      return (
-                        <div key={removeKey} className="admin-member-chip">
-                          <Link to={profileLink(member.userCode)} className="chip-link">
-                            {member.fullName} <span className="mono">{member.userCode}</span> {formatMemberRole(member.memberRole)}
-                          </Link>
-                          <button
-                            type="button"
-                            className="button button-soft"
-                            onClick={() => removeProjectMember(project.id, member.userId)}
-                            disabled={removing || lifecycleSaving || memberSaving || deletingProject || purgingProject}
-                          >
-                            {removing ? "..." : "Видалити"}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                    <div className="form-grid three-col admin-member-form">
+                      <label className="field">
+                        <span>Додати користувача</span>
+                        <select
+                          value={memberDraft.userId}
+                          onChange={(event) => updateMemberDraft(project.id, "userId", event.target.value)}
+                        >
+                          <option value="">Оберіть користувача</option>
+                          {users.map((user) => (
+                            <option key={`${project.id}-${user.userId}`} value={user.userId}>
+                              {user.fullName} ({user.code})
+                            </option>
+                          ))}
+                        </select>
+                      </label>
 
-                  <div className="form-grid three-col admin-member-form">
-                    <label className="field">
-                      <span>Додати користувача</span>
-                      <select
-                        value={memberDraft.userId}
-                        onChange={(event) => updateMemberDraft(project.id, "userId", event.target.value)}
-                      >
-                        <option value="">Оберіть користувача</option>
-                        {users.map((user) => (
-                          <option key={`${project.id}-${user.userId}`} value={user.userId}>
-                            {user.fullName} ({user.code})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                      <label className="field">
+                        <span>Роль у проєкті</span>
+                        <select
+                          value={memberDraft.memberRole}
+                          onChange={(event) => updateMemberDraft(project.id, "memberRole", event.target.value)}
+                        >
+                          {MEMBER_ROLE_OPTIONS.map((role) => (
+                            <option key={`${project.id}-${role}`} value={role}>
+                              {formatMemberRole(role)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
 
-                    <label className="field">
-                      <span>Роль у проєкті</span>
-                      <select
-                        value={memberDraft.memberRole}
-                        onChange={(event) => updateMemberDraft(project.id, "memberRole", event.target.value)}
-                      >
-                        {MEMBER_ROLE_OPTIONS.map((role) => (
-                          <option key={`${project.id}-${role}`} value={role}>
-                            {formatMemberRole(role)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div className="toolbar align-end">
-                      <button
-                        type="button"
-                        className="button button-primary"
-                        onClick={() => upsertProjectMember(project)}
-                        disabled={memberSaving || lifecycleSaving || deletingProject || purgingProject}
-                      >
-                        {memberSaving ? "Оновлення..." : "Додати або оновити"}
-                      </button>
+                      <div className="toolbar align-end">
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={() => upsertProjectMember(project)}
+                          disabled={memberSaving || lifecycleSaving || deletingProject || purgingProject}
+                        >
+                          {memberSaving ? "Оновлення..." : "Додати або оновити"}
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       <section className="panel admin-board" id="admin-users">
@@ -1138,41 +1088,46 @@ export default function AdminConsolePage() {
         <div className="admin-split-grid">
           <section className="panel panel-alt">
             <h3 className="panel-title">Ролі користувачів</h3>
-            {!filteredUsers.length ? <div className="empty-state">Користувачів за фільтром не знайдено.</div> : null}
-
-            <div className="list-stack">
-              {filteredUsers.map((user) => {
-                const savingRole = savingRoleUserId === user.userId;
-                return (
-                  <article key={user.userId} className="list-card admin-work-card">
-                    <h4>
-                      {user.fullName} <span className="mono">({user.code})</span>
-                    </h4>
-                    <p className="muted">{user.email}</p>
-                    <div className="toolbar">
-                      <select
-                        value={roleDrafts[user.userId] || user.role}
-                        onChange={(event) => updateRoleDraft(user.userId, event.target.value)}
-                      >
-                        {roles.map((role) => (
-                          <option key={`${user.userId}-${role}`} value={role}>
-                            {formatRoleLabel(role)}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        className="button button-primary"
-                        onClick={() => saveUserRole(user)}
-                        disabled={savingRole}
-                      >
-                        {savingRole ? "Збереження..." : "Зберегти роль"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
+            {!filteredUsers.length ? (
+              <EmptyState
+                title="Користувачів за фільтром не знайдено"
+                description="Спробуйте іншу частину імені, email або коду користувача."
+              />
+            ) : (
+              <div className="list-stack">
+                {filteredUsers.map((user) => {
+                  const savingRole = savingRoleUserId === user.userId;
+                  return (
+                    <article key={user.userId} className="list-card admin-work-card">
+                      <h4>
+                        {user.fullName} <span className="mono">({user.code})</span>
+                      </h4>
+                      <p className="muted">{user.email}</p>
+                      <div className="toolbar">
+                        <select
+                          value={roleDrafts[user.userId] || user.role}
+                          onChange={(event) => updateRoleDraft(user.userId, event.target.value)}
+                        >
+                          {roles.map((role) => (
+                            <option key={`${user.userId}-${role}`} value={role}>
+                              {formatRoleLabel(role)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="button button-primary"
+                          onClick={() => saveUserRole(user)}
+                          disabled={savingRole}
+                        >
+                          {savingRole ? "Збереження..." : "Зберегти роль"}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
           </section>
 
           <section className="panel panel-alt">
@@ -1222,6 +1177,20 @@ export default function AdminConsolePage() {
           </section>
         </div>
       </section>
+
+      <CreateProjectFromRequestModal
+        key={projectCreationRequest?.id || "admin-project-request-modal"}
+        open={Boolean(projectCreationRequest)}
+        request={projectCreationRequest}
+        users={users}
+        isSubmitting={creatingProjectRequestId != null}
+        onClose={() => {
+          if (creatingProjectRequestId == null) {
+            setProjectCreationRequest(null);
+          }
+        }}
+        onConfirm={createProjectForApprovedRequest}
+      />
     </div>
   );
 }

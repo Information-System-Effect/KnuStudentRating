@@ -5,7 +5,6 @@ import com.max.pract.entity.AppUser;
 import com.max.pract.entity.ProjectRequestEntity;
 import com.max.pract.exception.ApiBadRequestException;
 import com.max.pract.exception.ApiForbiddenException;
-import com.max.pract.project.dto.CreateProjectFromRequestBody;
 import com.max.pract.project.dto.CreateProjectRequestRequest;
 import com.max.pract.project.dto.ProjectRequestResponse;
 import com.max.pract.repo.AppUserRepository;
@@ -23,18 +22,15 @@ public class ProjectRequestService {
     private final ProjectRequestRepository projectRequestRepository;
     private final ProjectRepository projectRepository;
     private final AppUserRepository appUserRepository;
-    private final ProjectService projectService;
 
     public ProjectRequestService(
             ProjectRequestRepository projectRequestRepository,
             ProjectRepository projectRepository,
-            AppUserRepository appUserRepository,
-            ProjectService projectService
+            AppUserRepository appUserRepository
     ) {
         this.projectRequestRepository = projectRequestRepository;
         this.projectRepository = projectRepository;
         this.appUserRepository = appUserRepository;
-        this.projectService = projectService;
     }
 
     @Transactional
@@ -107,15 +103,7 @@ public class ProjectRequestService {
         projectRequest.setAdminComment(trimToNull(comment));
         projectRequest.setReviewedByUserId(adminId);
         projectRequest.setReviewedAt(LocalDateTime.now());
-        ProjectRequestEntity saved = projectRequestRepository.save(projectRequest);
-
-        Long createdProjectId = findCreatedProjectId(saved.getId());
-        if (targetStatus == ProjectRequestStatus.APPROVED && createdProjectId == null) {
-            var body = new CreateProjectFromRequestBody();
-            var createdProject = projectService.createFromApprovedRequest(saved.getId(), body);
-            createdProjectId = createdProject.id();
-        }
-        return toResponse(saved, createdProjectId);
+        return toResponse(projectRequestRepository.save(projectRequest));
     }
 
     private ProjectRequestResponse toResponse(ProjectRequestEntity entity) {
