@@ -4,6 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server.js",
+    "start:render": "node scripts/start-load-stand.js",
     "test": "jest --runInBand",
     "docs": "jsdoc src -r -d docs"
   },
@@ -22,7 +23,8 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "install": "^0.13.0"
+    "install": "^0.13.0",
+    "mountebank": "^2.9.1"
   },
   "devDependencies": {
     "jest": "^30.3.0",
